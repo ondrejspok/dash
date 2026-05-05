@@ -19,6 +19,9 @@ import type {
   PixelAgentsConfig,
   PixelAgentsStatus,
   ActivityInfo,
+  RtkStatus,
+  RtkDownloadProgress,
+  RtkTestResult,
   SkillsSearchResult,
   SkillInstallStatus,
   SkillRef,
@@ -275,6 +278,13 @@ export interface ElectronAPI {
   pixelAgentsStart: () => Promise<IpcResponse<void>>;
   pixelAgentsStop: () => Promise<IpcResponse<void>>;
   onPixelAgentsStatusChanged: (callback: (status: PixelAgentsStatus) => void) => () => void;
+
+  // RTK (Rust Token Killer)
+  rtkGetStatus: () => Promise<IpcResponse<RtkStatus>>;
+  rtkSetEnabled: (enabled: boolean) => Promise<IpcResponse<{ warning?: string }>>;
+  rtkDownload: () => Promise<IpcResponse<{ warning?: string } | undefined>>;
+  rtkTest: () => Promise<IpcResponse<RtkTestResult>>;
+  onRtkDownloadProgress: (callback: (progress: RtkDownloadProgress) => void) => () => void;
 
   // Skills
   skillsRefresh: (args?: { force?: boolean }) => Promise<IpcResponse<SkillsRegistryMeta>>;
