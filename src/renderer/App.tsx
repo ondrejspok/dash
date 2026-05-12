@@ -1565,7 +1565,10 @@ export function App() {
       const file = gitStatus?.files.find((f) => f.path === filePath && !f.staged);
       let resp;
       const ctx = diffContextLines ?? undefined;
-      if (file?.status === 'untracked') {
+      if (file?.status === 'untracked' || file?.status === 'conflicted') {
+        // For conflicted files, `git diff` produces a combined-diff format that
+        // our parser doesn't understand. Show the working-tree file (with the
+        // conflict markers) as additions, the same way we render untracked files.
         resp = await window.electronAPI.gitGetDiffUntracked({
           cwd: activeTask.path,
           filePath,
