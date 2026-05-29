@@ -8,7 +8,6 @@ import {
   Moon,
   RotateCcw,
   Download,
-  Pencil,
   Trash2,
   Plus,
   ExternalLink,
@@ -28,10 +27,6 @@ import { NOTIFICATION_SOUNDS, SOUND_LABELS } from '../sounds';
 import type { NotificationSound } from '../sounds';
 import { TERMINAL_THEMES } from '../terminal/terminalThemes';
 import type {
-  PixelAgentsConfig,
-  PixelAgentsStatus,
-  PixelAgentsOffice,
-  PixelAgentsOfficeStatus,
   RateLimits,
   UsageThresholds,
   RtkStatus,
@@ -92,9 +87,6 @@ interface SettingsModalProps {
   activeProjectPath?: string;
   keybindings: KeyBindingMap;
   onKeybindingsChange: (bindings: KeyBindingMap) => void;
-  pixelAgentsConfig: PixelAgentsConfig | null;
-  onPixelAgentsConfigChange: (config: PixelAgentsConfig) => void;
-  pixelAgentsStatus: PixelAgentsStatus;
   rtkStatus: RtkStatus | null;
   onRtkEnabledChange: (enabled: boolean) => void;
   onRtkDownload: () => void;
@@ -178,377 +170,6 @@ function KeyRecorder({
         <KeyCombo keys={keys} />
       )}
     </button>
-  );
-}
-
-function getViewerUrl(wsUrl: string): string | null {
-  const httpUrl = wsUrl.replace('wss://', 'https://').replace('ws://', 'http://') + '/office/';
-  try {
-    const parsed = new URL(httpUrl);
-    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
-    return parsed.href;
-  } catch {
-    return null;
-  }
-}
-
-function OfficeStatusDot({ status }: { status: PixelAgentsOfficeStatus | undefined }) {
-  const color = {
-    registered: 'bg-[hsl(var(--git-added))]',
-    connected: 'bg-[hsl(var(--git-modified))]',
-    disconnected: 'bg-[hsl(var(--git-deleted))]',
-    unknown: 'bg-border',
-  }[status || 'unknown'];
-
-  return <span className={`w-2 h-2 rounded-full flex-shrink-0 ${color}`} />;
-}
-
-function PixelAgentsSection({
-  config,
-  onChange,
-  status,
-}: {
-  config: PixelAgentsConfig | null;
-  onChange: (config: PixelAgentsConfig) => void;
-  status: PixelAgentsStatus;
-}) {
-  const [addingOffice, setAddingOffice] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [localName, setLocalName] = useState(config?.name || '');
-  const [localPhrases, setLocalPhrases] = useState(config?.phrases?.join(', ') || '');
-  const [phrasesDirty, setPhrasesDirty] = useState(false);
-  const nameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const effectiveConfig = config || { name: '', offices: [] };
-
-  // Sync local state when config changes externally
-  useEffect(() => {
-    setLocalName(config?.name || '');
-  }, [config?.name]);
-
-  useEffect(() => {
-    setLocalPhrases(config?.phrases?.join(', ') || '');
-  }, [config?.phrases]);
-
-  function updateConfig(partial: Partial<PixelAgentsConfig>) {
-    onChange({ ...effectiveConfig, ...partial });
-  }
-
-  function updateOffice(id: string, updates: Partial<PixelAgentsOffice>) {
-    onChange({
-      ...effectiveConfig,
-      offices: effectiveConfig.offices.map((o) => (o.id === id ? { ...o, ...updates } : o)),
-    });
-  }
-
-  function deleteOffice(id: string) {
-    onChange({
-      ...effectiveConfig,
-      offices: effectiveConfig.offices.filter((o) => o.id !== id),
-    });
-  }
-
-  function addOffice(office: PixelAgentsOffice) {
-    onChange({
-      ...effectiveConfig,
-      offices: [...effectiveConfig.offices, office],
-    });
-    setAddingOffice(false);
-  }
-
-  function saveEditedOffice(office: PixelAgentsOffice) {
-    updateOffice(office.id, office);
-    setEditingId(null);
-  }
-
-  return (
-    <div>
-      {/* Description */}
-      <div
-        className="p-4 rounded-xl border border-border/40 mb-6"
-        style={{ background: 'hsl(var(--surface-2))' }}
-      >
-        <p className="text-[12px] text-foreground/90 leading-relaxed">
-          Pixel Agents streams your Claude Code activity to a shared pixel art office. Your agents
-          appear as characters working at desks alongside your teammates.
-        </p>
-        <p className="text-[12px] text-foreground/90 leading-relaxed mt-2">
-          Only tool activity metadata is sent (e.g. &quot;Reading&quot;, &quot;Editing&quot;,
-          &quot;Running&quot;). No code, file paths, commands, or prompts ever leave your machine.
-        </p>
-        <p className="text-[12px] text-foreground/90 leading-relaxed mt-2">
-          Connect to a remote server hosted by your team, or run one locally with{' '}
-          <code className="px-1.5 py-0.5 rounded bg-accent/80 text-[10px] font-mono text-foreground/90">
-            npx @pixel-agents/office-server --port 8080
-          </code>{' '}
-          and connect to{' '}
-          <code className="px-1.5 py-0.5 rounded bg-accent/80 text-[10px] font-mono text-foreground/90">
-            ws://localhost:8080
-          </code>
-          .
-        </p>
-      </div>
-
-      {/* Display Name */}
-      <div className="mb-3">
-        <label className="block text-[11px] text-foreground/60 mb-1.5">Display Name</label>
-        <input
-          type="text"
-          value={localName}
-          onChange={(e) => {
-            const val = e.target.value;
-            setLocalName(val);
-            if (nameTimerRef.current) clearTimeout(nameTimerRef.current);
-            nameTimerRef.current = setTimeout(() => {
-              updateConfig({ name: val });
-            }, 500);
-          }}
-          placeholder="e.g. Alice"
-          className="w-full px-3 py-2.5 rounded-lg text-[12px] border border-border/60 bg-transparent text-foreground placeholder:text-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40"
-        />
-      </div>
-
-      {/* Phrases */}
-      <div className="mb-3">
-        <label className="flex items-center gap-1.5 text-[11px] text-foreground/60 mb-1.5">
-          Speech Bubble Phrases
-          {phrasesDirty && <span className="inline-block w-1.5 h-1.5 rounded-full bg-yellow-400" />}
-        </label>
-        <input
-          type="text"
-          value={localPhrases}
-          onChange={(e) => {
-            setLocalPhrases(e.target.value);
-            setPhrasesDirty(true);
-          }}
-          onBlur={() => {
-            if (!phrasesDirty) return;
-            const parsed = localPhrases
-              .split(',')
-              .map((s) => s.trim())
-              .filter(Boolean)
-              .map((s) => (s.length > 50 ? s.slice(0, 50) : s));
-            updateConfig({ phrases: parsed });
-            setPhrasesDirty(false);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              (e.target as HTMLInputElement).blur();
-            }
-          }}
-          placeholder="e.g. lgtm, shipping it!, need coffee"
-          className="w-full px-3 py-2.5 rounded-lg text-[12px] border border-border/60 bg-transparent text-foreground placeholder:text-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40"
-        />
-        <p className="text-[10px] text-foreground/40 mt-1">
-          Comma-separated. Your agents will randomly say these in speech bubbles. Max 50 characters
-          each.
-        </p>
-      </div>
-
-      {/* Offices list */}
-      {effectiveConfig.offices.length > 0 && (
-        <div
-          className="rounded-xl border border-border/40 overflow-hidden mb-3"
-          style={{ background: 'hsl(var(--surface-2))' }}
-        >
-          {effectiveConfig.offices.map((office, i) =>
-            editingId === office.id ? (
-              <OfficeForm
-                key={office.id}
-                initial={office}
-                onSave={saveEditedOffice}
-                onCancel={() => setEditingId(null)}
-              />
-            ) : (
-              <div
-                key={office.id}
-                className={`flex items-center gap-3 px-4 py-3 ${
-                  i < effectiveConfig.offices.length - 1 ? 'border-b border-border/20' : ''
-                }`}
-              >
-                <OfficeStatusDot status={office.enabled ? status.offices[office.id] : undefined} />
-                <div className="flex-1 min-w-0">
-                  <div className="text-[12px] text-foreground font-medium truncate">
-                    {office.id}
-                  </div>
-                  <div className="text-[10px] text-foreground/40 font-mono truncate">
-                    {office.url}
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Tooltip content="Open in browser">
-                    <button
-                      onClick={() => {
-                        const url = getViewerUrl(office.url);
-                        if (url) window.electronAPI.openExternal(url);
-                      }}
-                      className="p-1.5 rounded-md text-foreground/30 hover:text-foreground hover:bg-accent/60 transition-all duration-150"
-                    >
-                      <ExternalLink size={12} strokeWidth={1.8} />
-                    </button>
-                  </Tooltip>
-                  <Tooltip content="Edit">
-                    <button
-                      onClick={() => setEditingId(office.id)}
-                      className="p-1.5 rounded-md text-foreground/30 hover:text-foreground hover:bg-accent/60 transition-all duration-150"
-                    >
-                      <Pencil size={12} strokeWidth={1.8} />
-                    </button>
-                  </Tooltip>
-                  <Tooltip content="Delete">
-                    <button
-                      onClick={() => deleteOffice(office.id)}
-                      className="p-1.5 rounded-md text-foreground/30 hover:text-destructive hover:bg-destructive/10 transition-all duration-150"
-                    >
-                      <Trash2 size={12} strokeWidth={1.8} />
-                    </button>
-                  </Tooltip>
-                  {/* Enable/disable toggle */}
-                  <button
-                    onClick={() => updateOffice(office.id, { enabled: !office.enabled })}
-                    className="ml-1"
-                  >
-                    <div
-                      className={`w-8 h-[18px] rounded-full relative transition-colors duration-150 flex-shrink-0 ${
-                        office.enabled ? 'bg-primary' : 'bg-border'
-                      }`}
-                    >
-                      <div
-                        className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-transform duration-150 ${
-                          office.enabled ? 'translate-x-[16px]' : 'translate-x-[2px]'
-                        }`}
-                      />
-                    </div>
-                  </button>
-                </div>
-              </div>
-            ),
-          )}
-        </div>
-      )}
-
-      {/* Add office form or button */}
-      {addingOffice ? (
-        <OfficeForm onSave={addOffice} onCancel={() => setAddingOffice(false)} />
-      ) : (
-        <button
-          onClick={() => setAddingOffice(true)}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] border border-dashed border-border/60 text-foreground/50 hover:text-foreground hover:border-border hover:bg-accent/30 transition-all duration-150 w-full justify-center"
-        >
-          <Plus size={12} strokeWidth={2} />
-          Add Office
-        </button>
-      )}
-
-      <p className="text-[10px] text-foreground/50 mt-2">
-        Private servers require a token set via the WATCHER_TOKEN env var on the server.
-      </p>
-    </div>
-  );
-}
-
-function OfficeForm({
-  initial,
-  onSave,
-  onCancel,
-}: {
-  initial?: PixelAgentsOffice;
-  onSave: (office: PixelAgentsOffice) => void;
-  onCancel: () => void;
-}) {
-  const [name, setName] = useState(initial?.id || '');
-  const [url, setUrl] = useState(initial?.url || '');
-  const [isPublic, setIsPublic] = useState(initial ? !initial.token : true);
-  const [token, setToken] = useState(initial?.token || '');
-
-  const isValid = name.trim() && url.trim() && (isPublic || token.trim());
-
-  function handleSave() {
-    if (!isValid) return;
-    onSave({
-      id: name.trim(),
-      url: url.trim(),
-      token: isPublic ? null : token.trim(),
-      enabled: initial?.enabled ?? true,
-    });
-  }
-
-  return (
-    <div className="p-4 space-y-3 border border-border/40 rounded-xl bg-[hsl(var(--surface-2))]">
-      <div>
-        <label className="block text-[11px] text-foreground/60 mb-1.5">Name</label>
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Team Office"
-          autoFocus
-          className="w-full px-3 py-2.5 rounded-lg text-[12px] border border-border/60 bg-transparent text-foreground placeholder:text-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40"
-        />
-      </div>
-      <div>
-        <label className="block text-[11px] text-foreground/60 mb-1.5">Server URL</label>
-        <input
-          type="text"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="wss://example.com"
-          className="w-full px-3 py-2.5 rounded-lg text-[12px] font-mono border border-border/60 bg-transparent text-foreground placeholder:text-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40"
-        />
-      </div>
-      <div>
-        <label className="block text-[11px] text-foreground/60 mb-1.5">Access</label>
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={() => setIsPublic(true)}
-            className={`px-3 py-2.5 rounded-lg text-[12px] border transition-all duration-150 ${
-              isPublic
-                ? 'border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20 font-medium'
-                : 'border-border/60 text-foreground/60 hover:bg-accent/40 hover:text-foreground'
-            }`}
-          >
-            Public
-          </button>
-          <button
-            onClick={() => setIsPublic(false)}
-            className={`px-3 py-2.5 rounded-lg text-[12px] border transition-all duration-150 ${
-              !isPublic
-                ? 'border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20 font-medium'
-                : 'border-border/60 text-foreground/60 hover:bg-accent/40 hover:text-foreground'
-            }`}
-          >
-            Private
-          </button>
-        </div>
-      </div>
-      {!isPublic && (
-        <div>
-          <label className="block text-[11px] text-foreground/60 mb-1.5">Token</label>
-          <input
-            type="password"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            placeholder="Authentication token"
-            className="w-full px-3 py-2.5 rounded-lg text-[12px] font-mono border border-border/60 bg-transparent text-foreground placeholder:text-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40"
-          />
-        </div>
-      )}
-      <div className="flex gap-2 pt-1">
-        <button
-          onClick={onCancel}
-          className="flex-1 px-3 py-2 rounded-lg text-[12px] border border-border/60 text-foreground/60 hover:bg-accent/40 hover:text-foreground transition-all duration-150"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={handleSave}
-          disabled={!isValid}
-          className="flex-1 px-3 py-2 rounded-lg text-[12px] font-medium border border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20 hover:bg-primary/15 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          {initial ? 'Save' : 'Add'}
-        </button>
-      </div>
-    </div>
   );
 }
 
@@ -1036,9 +657,6 @@ export function SettingsModal({
   activeProjectPath,
   keybindings,
   onKeybindingsChange,
-  pixelAgentsConfig,
-  onPixelAgentsConfigChange,
-  pixelAgentsStatus,
   rtkStatus,
   onRtkEnabledChange,
   onRtkDownload,
@@ -1184,12 +802,6 @@ export function SettingsModal({
               }`}
             >
               {t.label}
-              {t.id === 'add-ons' &&
-                Object.values(pixelAgentsStatus.offices).some(
-                  (s) => s === 'connected' || s === 'registered',
-                ) && (
-                  <span className="ml-1.5 w-2 h-2 rounded-full bg-[hsl(var(--git-added))] inline-block" />
-                )}
             </button>
           ))}
         </div>
@@ -1732,13 +1344,6 @@ export function SettingsModal({
                   onEnabledChange={onRtkEnabledChange}
                   onDownload={onRtkDownload}
                   progress={rtkDownloadProgress}
-                />
-              </AddOnSection>
-              <AddOnSection title="Pixel Agents">
-                <PixelAgentsSection
-                  config={pixelAgentsConfig}
-                  onChange={onPixelAgentsConfigChange}
-                  status={pixelAgentsStatus}
                 />
               </AddOnSection>
             </div>

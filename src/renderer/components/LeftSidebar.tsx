@@ -198,7 +198,6 @@ interface LeftSidebarProps {
   onArchiveTask: (id: string) => void;
   onRestoreTask: (id: string) => void;
   onOpenSettings: () => void;
-  onOpenPixelAgents?: () => void;
   onShowCommitGraph: (projectId: string) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
@@ -209,7 +208,6 @@ interface LeftSidebarProps {
   onReorderProjects?: (reordered: Project[]) => void;
   onReorderTasks?: (projectId: string, reordered: Task[]) => void;
   onReorderTasksCommit?: (projectId: string, reordered: Task[]) => void;
-  pixelAgentsConnectedCount?: number;
   rotationTasks?: Task[];
   onReorderRotation?: (reordered: Task[]) => void;
   onRemoveFromRotation?: (taskId: string) => void;
@@ -233,7 +231,6 @@ export function LeftSidebar({
   onArchiveTask,
   onRestoreTask,
   onOpenSettings,
-  onOpenPixelAgents,
   onShowCommitGraph,
   collapsed,
   onToggleCollapse,
@@ -244,7 +241,6 @@ export function LeftSidebar({
   onReorderProjects,
   onReorderTasks,
   onReorderTasksCommit,
-  pixelAgentsConnectedCount = 0,
   rotationTasks = [],
   onReorderRotation,
   onRemoveFromRotation,
@@ -431,9 +427,6 @@ export function LeftSidebar({
             className="relative p-2 rounded-md hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
           >
             <Settings size={18} strokeWidth={1.5} />
-            {pixelAgentsConnectedCount > 0 && (
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[hsl(var(--git-added))]" />
-            )}
           </button>
         </Tooltip>
       </div>
@@ -831,25 +824,6 @@ export function LeftSidebar({
         >
           <Settings size={14} strokeWidth={1.8} />
           <span>Settings</span>
-          {pixelAgentsConnectedCount > 0 && (
-            <Tooltip content="Pixel Agents streaming to office">
-              <span
-                className="ml-auto flex items-center gap-1.5 text-[12px] text-[hsl(var(--git-added))] hover:underline"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenPixelAgents?.();
-                }}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--git-added))] flex-shrink-0" />
-                <span className="office-label">
-                  {pixelAgentsConnectedCount === 1
-                    ? '1 office'
-                    : `${pixelAgentsConnectedCount} offices`}
-                </span>
-                <span className="office-count">{pixelAgentsConnectedCount}</span>
-              </span>
-            </Tooltip>
-          )}
         </button>
       </div>
     </div>
