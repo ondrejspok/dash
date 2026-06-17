@@ -36,6 +36,8 @@ export class TerminalSessionManager {
   private readyFallbackTimer: ReturnType<typeof setTimeout> | null = null;
   private _currentCwd: string;
   private onCwdChangeCallback: ((cwd: string) => void) | null = null;
+  private _currentTitle = '';
+  private onTitleChangeCallback: ((title: string) => void) | null = null;
   private fitDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private lastPtyCols = 0;
   private lastPtyRows = 0;
@@ -119,6 +121,18 @@ export class TerminalSessionManager {
       const sel = this.terminal.getSelection();
       if (sel) this.lastSelection = sel;
     });
+
+    // Capture Claude Code's terminal title (OSC 0/2). Only for the Claude
+    // session — the shell sets its own titles, which we don't surface.
+    if (!this.shellOnly) {
+      this.terminal.onTitleChange((title) => {
+        const trimmed = title.trim();
+        if (trimmed && trimmed !== this._currentTitle) {
+          this._currentTitle = trimmed;
+          this.onTitleChangeCallback?.(trimmed);
+        }
+      });
+    }
 
     // Track cwd via OSC 7 (emitted by zsh on macOS by default)
     this.terminal.parser.registerOscHandler(7, (data) => {
@@ -561,6 +575,16 @@ export class TerminalSessionManager {
 
   onCwdChange(cb: ((cwd: string) => void) | null) {
     this.onCwdChangeCallback = cb;
+  }
+
+  get currentTitle(): string {
+    return this._currentTitle;
+  }
+
+  onTitleChange(cb: ((title: string) => void) | null) {
+    this.onTitleChangeCallback = cb;
+    // Replay the current title so a late subscriber gets the latest value.
+    if (cb && this._currentTitle) cb(this._currentTitle);
   }
 
   setTheme(isDark: boolean) {

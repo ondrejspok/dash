@@ -46,6 +46,7 @@ export interface Task {
   status: string;
   useWorktree: boolean;
   autoApprove: boolean;
+  useClaudeTitle: boolean;
   branchCreatedByDash: boolean;
   linkedItems: LinkedItem[] | null;
   contextPrompt: string | null;

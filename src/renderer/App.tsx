@@ -267,6 +267,20 @@ export function App() {
   // Activity state — keys are PTY IDs that have active sessions
   const [taskActivity, setTaskActivity] = useState<Record<string, ActivityInfo>>({});
 
+  // Live Claude Code terminal titles per task (id → title). Used as the task's
+  // display name when the task has `useClaudeTitle` enabled.
+  const [taskTitles, setTaskTitles] = useState<Record<string, string>>({});
+  useEffect(() => {
+    return sessionRegistry.subscribeTitles((id, title) => {
+      setTaskTitles((prev) => (prev[id] === title ? prev : { ...prev, [id]: title }));
+    });
+  }, []);
+
+  const taskDisplayName = useCallback(
+    (task: Task) => (task.useClaudeTitle && taskTitles[task.id] ? taskTitles[task.id] : task.name),
+    [taskTitles],
+  );
+
   // Remote control state
   const [remoteControlStates, setRemoteControlStates] = useState<
     Record<string, RemoteControlState>
@@ -1326,6 +1340,7 @@ export function App() {
         path: taskPath,
         useWorktree,
         autoApprove,
+        useClaudeTitle: options.useClaudeTitle,
         // Only Dash-created branches should be auto-deleted on task removal.
         branchCreatedByDash: options.kind === 'worktree-new-branch' && !!worktreeInfo,
         linkedItems: linkedItems ?? null,
@@ -1637,6 +1652,7 @@ export function App() {
               }}
               tasksByProject={tasksByProject}
               activeTaskId={activeTaskId}
+              taskDisplayName={taskDisplayName}
               onSelectTask={handleSelectTask}
               onNewTask={handleNewTask}
               onDeleteTask={handleDeleteTask}
@@ -1701,6 +1717,7 @@ export function App() {
               tasks={activeProjectTasks}
               activeTaskId={activeTaskId}
               taskActivity={taskActivity}
+              taskDisplayName={taskDisplayName}
               unseenTaskIds={unseenTaskIds}
               remoteControlStates={remoteControlStates}
               onSelectTask={setActiveTaskId}

@@ -34,6 +34,7 @@ function RotationSection({
   rotationTasks,
   activeTaskId,
   taskActivity,
+  taskDisplayName,
   unseenTaskIds,
   projects,
   onSelectTask,
@@ -44,6 +45,7 @@ function RotationSection({
   rotationTasks: Task[];
   activeTaskId: string | null;
   taskActivity: Record<string, ActivityInfo>;
+  taskDisplayName: (task: Task) => string;
   unseenTaskIds?: Set<string>;
   projects: Project[];
   onSelectTask: (projectId: string, taskId: string) => void;
@@ -145,7 +147,7 @@ function RotationSection({
                 <div className="w-[6px] h-[6px] rounded-full bg-emerald-400 flex-shrink-0" />
               ) : null}
 
-              <span className="truncate flex-1">{task.name}</span>
+              <span className="truncate flex-1">{taskDisplayName(task)}</span>
               {ctx && ctx.percentage > 0 && (
                 <span
                   className={`text-[9px] tabular-nums flex-shrink-0 ${
@@ -192,6 +194,7 @@ interface LeftSidebarProps {
   onProjectSettings: (id: string) => void;
   tasksByProject: Record<string, Task[]>;
   activeTaskId: string | null;
+  taskDisplayName: (task: Task) => string;
   onSelectTask: (projectId: string, taskId: string) => void;
   onNewTask: (projectId: string) => void;
   onDeleteTask: (id: string) => void;
@@ -225,6 +228,7 @@ export function LeftSidebar({
   onProjectSettings,
   tasksByProject,
   activeTaskId,
+  taskDisplayName,
   onSelectTask,
   onNewTask,
   onDeleteTask,
@@ -462,6 +466,7 @@ export function LeftSidebar({
           rotationTasks={rotationTasks}
           activeTaskId={activeTaskId}
           taskActivity={taskActivity}
+          taskDisplayName={taskDisplayName}
           unseenTaskIds={unseenTaskIds}
           projects={projects}
           onSelectTask={onSelectTask}
@@ -677,7 +682,7 @@ export function LeftSidebar({
                                 />
                               )}
 
-                              <span className="truncate flex-1">{task.name}</span>
+                              <span className="truncate flex-1">{taskDisplayName(task)}</span>
 
                               {/* Context percentage (visible when data available, hidden on hover to show actions) */}
                               {ctx && ctx.percentage > 0 && (
@@ -775,7 +780,7 @@ export function LeftSidebar({
                                     key={task.id}
                                     className="group/archived flex items-center gap-2 pl-3.5 pr-2 py-[6px] rounded-md text-[13px] text-muted-foreground/50"
                                   >
-                                    <span className="truncate flex-1">{task.name}</span>
+                                    <span className="truncate flex-1">{taskDisplayName(task)}</span>
                                     <div className="hidden group-hover/archived:flex gap-0.5 flex-shrink-0">
                                       <IconButton
                                         onClick={() => onRestoreTask(task.id)}

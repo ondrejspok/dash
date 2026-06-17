@@ -13,6 +13,10 @@ class SessionRegistryImpl {
   private sessions = new Map<string, TerminalSessionManager>();
   private _isDark = true;
   private _themeId = 'default';
+  // Live Claude Code terminal titles, keyed by session id (= task id for Claude
+  // sessions). Lets the UI show the live title as a task's display name.
+  private titles = new Map<string, string>();
+  private titleListeners = new Set<(id: string, title: string) => void>();
 
   getOrCreate(opts: Omit<AttachOptions, 'container'>): TerminalSessionManager {
     let session = this.sessions.get(opts.id);
@@ -26,8 +30,27 @@ class SessionRegistryImpl {
         themeId: opts.themeId ?? this._themeId,
       });
       this.sessions.set(opts.id, session);
+      // Track the Claude session's title and fan it out to subscribers.
+      if (!opts.shellOnly) {
+        session.onTitleChange((title) => {
+          this.titles.set(opts.id, title);
+          this.titleListeners.forEach((l) => l(opts.id, title));
+        });
+      }
     }
     return session;
+  }
+
+  getTitle(id: string): string | undefined {
+    return this.titles.get(id);
+  }
+
+  /** Subscribe to live title changes for any Claude session. Returns an unsubscribe fn. */
+  subscribeTitles(cb: (id: string, title: string) => void): () => void {
+    this.titleListeners.add(cb);
+    return () => {
+      this.titleListeners.delete(cb);
+    };
   }
 
   attach(opts: AttachOptions): TerminalSessionManager {

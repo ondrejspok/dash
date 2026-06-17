@@ -33,6 +33,7 @@ export const tasks = sqliteTable(
     status: text('status').notNull().default('idle'),
     useWorktree: integer('use_worktree', { mode: 'boolean' }).default(true),
     autoApprove: integer('auto_approve', { mode: 'boolean' }).default(false),
+    useClaudeTitle: integer('use_claude_title', { mode: 'boolean' }).default(false),
     linkedItems: text('linked_items'),
     contextPrompt: text('context_prompt'),
     branchCreatedByDash: integer('branch_created_by_dash', { mode: 'boolean' }).default(false),

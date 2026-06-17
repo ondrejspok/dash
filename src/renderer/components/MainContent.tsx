@@ -76,6 +76,7 @@ interface MainContentProps {
   tasks?: Task[];
   activeTaskId?: string | null;
   taskActivity?: Record<string, import('../../shared/types').ActivityInfo>;
+  taskDisplayName?: (task: Task) => string;
   unseenTaskIds?: Set<string>;
   remoteControlStates?: Record<string, RemoteControlState>;
   onSelectTask?: (id: string) => void;
@@ -98,6 +99,7 @@ export function MainContent({
   tasks = [],
   activeTaskId,
   taskActivity = {},
+  taskDisplayName = (task) => task.name,
   unseenTaskIds,
   remoteControlStates = {},
   onSelectTask,
@@ -254,7 +256,7 @@ export function MainContent({
                               : 'bg-muted-foreground/30'
                   }`}
                 />
-                <span className="truncate max-w-[140px]">{task.name}</span>
+                <span className="truncate max-w-[140px]">{taskDisplayName(task)}</span>
                 {i < 9 && (
                   <div className="flex items-center gap-[2px] ml-1">
                     <kbd className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-[3px] text-[9px] font-medium leading-none border border-border/80 bg-gradient-to-b from-white/[0.06] to-transparent text-foreground/50 shadow-[0_0.5px_0_0.5px_hsl(var(--border)/0.4),inset_0_0.5px_0_hsl(var(--foreground)/0.04)] font-mono">
@@ -275,7 +277,7 @@ export function MainContent({
           <div className="flex items-center gap-2 flex-shrink-0">
             <div className="w-[7px] h-[7px] rounded-full bg-[hsl(var(--git-added))] status-pulse flex-shrink-0" />
             <span className="text-[13px] font-medium text-foreground whitespace-nowrap">
-              {activeTask.name}
+              {taskDisplayName(activeTask)}
             </span>
           </div>
           {activeTask.linkedItems && activeTask.linkedItems.length > 0 && (

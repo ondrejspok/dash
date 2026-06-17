@@ -26,6 +26,7 @@ import { isAdoRemote } from '../../shared/urls';
 export type CreateTaskOptions = {
   name: string;
   autoApprove: boolean;
+  useClaudeTitle: boolean;
   linkedItems?: LinkedItem[];
 } & (
   | { kind: 'worktree-new-branch'; baseRef: string; pushRemote: boolean }
@@ -108,6 +109,11 @@ export function TaskModal({
   onGitInit,
 }: TaskModalProps) {
   const [name, setName] = useState('');
+  // "Use Claude's title as the name": on by default while the name is empty,
+  // auto-turns off once the user types, but a manual toggle pins the choice so
+  // the user can set a starting name that then follows Claude's live title.
+  const [useClaudeTitle, setUseClaudeTitle] = useState(true);
+  const [titleModeOverridden, setTitleModeOverridden] = useState(false);
   const [gitReady, setGitReady] = useState(isGitRepo);
   const worktreeForced = !!existingNonWorktreeTask;
   const [useWorktree, setUseWorktree] = useState(isGitRepo || worktreeForced);
@@ -221,9 +227,19 @@ export function TaskModal({
     b.name.toLowerCase().includes(branchSearch.toLowerCase()),
   );
 
+  function handleNameChange(value: string) {
+    setName(value);
+    if (!titleModeOverridden) setUseClaudeTitle(value.trim() === '');
+  }
+
+  function toggleUseClaudeTitle() {
+    setTitleModeOverridden(true);
+    setUseClaudeTitle((prev) => !prev);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim() || isCreating) return;
+    if ((!name.trim() && !useClaudeTitle) || isCreating) return;
 
     // Build unified linkedItems from both providers
     const ghItems: LinkedItem[] = selectedIssues.map((issue) => ({
@@ -249,7 +265,7 @@ export function TaskModal({
     const allLinkedItems: LinkedItem[] = [...ghItems, ...adoItems];
     const linkedItems = allLinkedItems.length > 0 ? allLinkedItems : undefined;
 
-    const base = { name: name.trim(), autoApprove, linkedItems };
+    const base = { name: name.trim() || 'New task', autoApprove, useClaudeTitle, linkedItems };
 
     let options: CreateTaskOptions;
     if (useWorktree) {
@@ -316,12 +332,26 @@ export function TaskModal({
             <input
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => handleNameChange(e.target.value)}
               placeholder="e.g. Fix auth bug, Add dark mode..."
               maxLength={60}
               className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[13px] placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150"
               autoFocus
             />
+            <label className="mt-2.5 flex items-center gap-2.5 cursor-pointer group">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  checked={useClaudeTitle}
+                  onChange={toggleUseClaudeTitle}
+                  className="sr-only peer"
+                />
+                <div className="w-8 h-[18px] rounded-full bg-accent peer-checked:bg-primary/80 transition-colors duration-200" />
+                <div className="absolute top-[3px] left-[3px] w-3 h-3 rounded-full bg-muted-foreground/40 peer-checked:bg-primary-foreground peer-checked:translate-x-[14px] transition-all duration-200" />
+              </div>
+              <span className="text-[13px] text-foreground/80">Use Claude&apos;s title</span>
+              <span className="text-[11px] text-muted-foreground/40">name follows the session</span>
+            </label>
           </div>
 
           {/* Worktree toggle */}
@@ -680,7 +710,7 @@ export function TaskModal({
             <button
               type="submit"
               disabled={
-                !name.trim() ||
+                (!name.trim() && !useClaudeTitle) ||
                 isCreating ||
                 // Block submit when git is ready but no branch is selected (e.g.
                 // branch fetch failed). Otherwise we'd silently create the task

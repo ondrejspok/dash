@@ -160,6 +160,12 @@ export function runMigrations(): void {
     /* already exists */
   }
 
+  try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN use_claude_title INTEGER DEFAULT 0`);
+  } catch {
+    /* already exists */
+  }
+
   // Backfill: sync is_git_repo with actual filesystem state
   try {
     const allProjects = rawDb.prepare(`SELECT id, path FROM projects`).all() as {
