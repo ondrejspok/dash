@@ -713,7 +713,9 @@ export async function startDirectPty(options: {
   }
 
   if (options.autoApprove) {
-    args.push('--dangerously-skip-permissions');
+    // Yolo mode → Claude's "auto" permission mode: auto-approves tool calls but
+    // keeps background safety checks, rather than bypassing permissions outright.
+    args.push('--permission-mode', 'auto');
   }
   const env = buildDirectEnv(options.isDark ?? true);
 
