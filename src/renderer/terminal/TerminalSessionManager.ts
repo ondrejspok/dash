@@ -8,6 +8,9 @@ import { darkTheme, lightTheme, resolveTheme } from './terminalThemes';
 
 const SNAPSHOT_DEBOUNCE_MS = 10_000;
 const MEMORY_LIMIT_BYTES = 128 * 1024 * 1024; // 128MB soft limit
+// After an involuntary Claude exit we auto-resume once; a second exit within
+// this window is treated as a crash loop and falls back to a shell instead.
+const AUTO_RESUME_COOLDOWN_MS = 8_000;
 
 export class TerminalSessionManager {
   readonly id: string;
@@ -42,6 +45,8 @@ export class TerminalSessionManager {
   private lastPtyCols = 0;
   private lastPtyRows = 0;
   private savedViewportY: number | null = null;
+  private lastAutoResumeAt = 0;
+  private pendingReattachRedraw = false;
   readonly shellOnly: boolean;
   private themeId: string;
   // Claude Code's TUI rewrites cells continuously, which causes xterm to drop
@@ -380,34 +385,17 @@ export class TerminalSessionManager {
         }
         if (gen !== this.attachGeneration) return;
 
-        let result = await this.startPty();
+        const result = await this.startPty();
         if (gen !== this.attachGeneration) return;
-
-        // If we reattached to an existing direct-spawn PTY (e.g. after CMD+R),
-        // kill it and spawn fresh. Ink's internal cursor state can't be
-        // recovered via SIGWINCH, but a fresh Claude Code process with `-r`
-        // pointed at this task's session file gives a clean TUI init.
-        if (result.reattached && result.isDirectSpawn) {
-          this._isRestarting = true;
-          this.readyFired = false;
-          this.onRestartingCallback?.();
-          // Discard any data buffered from the old PTY before killing it
-          this.dataBuffer = [];
-          window.electronAPI.ptyKill(this.id);
-          this.ptyStarted = false;
-          result = await this.startPty();
-          if (gen !== this.attachGeneration) return;
-
-          // Fallback: hide overlay after 10s even if no data arrives
-          this.readyFallbackTimer = setTimeout(() => {
-            this.fireReady();
-          }, 10_000);
-        }
 
         isDirectSpawn = result.isDirectSpawn;
 
-        // Show previous snapshot for visual context while Claude starts
-        if (existingSnapshot && !result.reattached) {
+        // Restore the previous snapshot for visual context. On a fresh spawn it
+        // shows the last frame while Claude re-inits; on a *reattach* (the
+        // renderer reloaded but the Claude process is still alive — e.g. a Vite
+        // HMR reload or resume from sleep) it restores the exact buffer and
+        // cursor state Ink expects, so the redraw nudge below lands cleanly.
+        if (existingSnapshot) {
           try {
             this.terminal.write(existingSnapshot.data);
           } catch (err) {
@@ -416,6 +404,14 @@ export class TerminalSessionManager {
             // the user just sees a half-rendered terminal with no clue why.
             console.warn('[terminal] writing snapshot to xterm failed:', err);
           }
+        }
+
+        // Reattached to a still-running Claude PTY: never kill it — killing it
+        // is what lost in-flight work and made sessions "disappear" on reload.
+        // Keep the process and flag a SIGWINCH redraw so Ink repaints its live
+        // region (input box/cursor) once the terminal has been fit() below.
+        if (result.isDirectSpawn && result.reattached) {
+          this.pendingReattachRedraw = true;
         }
       }
     }
@@ -477,6 +473,18 @@ export class TerminalSessionManager {
             cols,
             rows: dims.rows,
           });
+        }
+
+        // Reattached to a live Claude PTY: force Ink to repaint its live region
+        // without restarting the process. rows+1 → rows fires two SIGWINCHs; the
+        // restored snapshot means Ink's cursor-relative repaint aligns with the
+        // buffer, so the input box refreshes cleanly and the task keeps running.
+        if (this.pendingReattachRedraw) {
+          this.pendingReattachRedraw = false;
+          window.electronAPI.ptyResize({ id: this.id, cols, rows: dims.rows + 1 });
+          setTimeout(() => {
+            window.electronAPI.ptyResize({ id: this.id, cols, rows: dims.rows });
+          }, 50);
         }
       });
     }
@@ -776,19 +784,41 @@ export class TerminalSessionManager {
       this.debounceSaveSnapshot();
     });
 
-    // Listen for PTY exit → spawn shell fallback
+    // Listen for PTY exit. A Claude process that dies *involuntarily* (e.g. a
+    // screen lock killing the ConPTY child) should auto-resume the session via
+    // `claude --continue` rather than dropping to a bare shell and losing the
+    // conversation — that's the "disappearing sessions" complaint. A clean exit
+    // (code 0, e.g. the user ran /exit or Ctrl-D) still falls through to a shell.
     this.unsubExit = window.electronAPI.onPtyExit(this.id, (info) => {
       if (this.disposed) return;
 
-      // Show xterm's real cursor for the shell fallback
-      this.terminal.write('\x1b[?25h');
+      const now = Date.now();
+      const involuntary = (info.exitCode ?? 0) !== 0 || info.signal != null;
+      const crashLooping = now - this.lastAutoResumeAt < AUTO_RESUME_COOLDOWN_MS;
 
+      if (!this.shellOnly && involuntary && !crashLooping) {
+        this.lastAutoResumeAt = now;
+        this._isRestarting = true;
+        this.readyFired = false;
+        this.onRestartingCallback?.();
+        // Drop any buffered output from the dead PTY, then re-spawn Claude.
+        this.dataBuffer = null;
+        window.electronAPI.ptyKill(this.id);
+        this.ptyStarted = false;
+        this.startPty().then(() => {
+          this.connectPtyListeners();
+        });
+        return;
+      }
+
+      // Shell fallback: clean exit, an already-shell session, or repeated
+      // involuntary exits (crash loop) where resuming wouldn't help.
+      this.terminal.write('\x1b[?25h');
       this.terminal.writeln(`\r\n\x1b[90m[Process exited with code ${info.exitCode}]\x1b[0m\r\n`);
 
       // Ensure PTY is cleaned up in main process before spawning shell
       window.electronAPI.ptyKill(this.id);
 
-      // Spawn shell fallback
       const dims = this.fitAddon.proposeDimensions();
       window.electronAPI
         .ptyStart({

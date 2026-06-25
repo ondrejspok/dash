@@ -79,6 +79,16 @@ function fixPath(): void {
 
 fixPath();
 
+// ── GPU / screen-lock hardening (Windows) ────────────────────
+// On Windows, locking the screen frequently crashes Electron's GPU process,
+// which tears down the renderer and forces a reload — that reload kills the
+// running Claude PTY and loses in-flight work ("disappearing sessions"). With
+// no GPU process there is nothing to crash on lock; xterm falls back to the
+// canvas renderer. Must be called before app 'ready'.
+if (process.platform === 'win32') {
+  app.disableHardwareAcceleration();
+}
+
 // ── Single Instance Lock ──────────────────────────────────────
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {

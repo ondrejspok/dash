@@ -4,6 +4,12 @@ import * as path from 'path';
 // 1. Set app name BEFORE any app.getPath() calls
 app.setName('Dash');
 
+// Dev-only: run an isolated instance (own DB, own single-instance lock) alongside
+// a normal Dash by setting DASH_USER_DATA_DIR. Must happen before any getPath('userData').
+if (process.env.DASH_USER_DATA_DIR) {
+  app.setPath('userData', process.env.DASH_USER_DATA_DIR);
+}
+
 // 2. Install path aliases for main process
 // @shared/* → dist/main/shared/*
 // @/* → dist/main/main/*

@@ -8,9 +8,22 @@ if (process.env.DASH_SKIP_REBUILD) {
 
 console.log('[postinstall] Rebuilding native modules (node-pty, better-sqlite3) for Electron…');
 
+// node-pty's bundled winpty runs `cmd /c "cd shared && GetCommitHash.bat"` during
+// gyp configure. When NoDefaultCurrentDirectoryInExePath is set, cmd.exe refuses to
+// run the batch file from the current directory ("not recognized"), so gyp aborts and
+// the whole rebuild fails. Strip it from the child env so winpty can configure.
+const env = { ...process.env };
+if (env.NoDefaultCurrentDirectoryInExePath) {
+  delete env.NoDefaultCurrentDirectoryInExePath;
+  console.log(
+    '[postinstall] Cleared NoDefaultCurrentDirectoryInExePath for the rebuild (breaks node-pty/winpty on Windows).'
+  );
+}
+
 const result = spawnSync('electron-rebuild', ['-f', '-w', 'node-pty,better-sqlite3'], {
   stdio: 'inherit',
   shell: true,
+  env,
 });
 
 if (result.status !== 0) {

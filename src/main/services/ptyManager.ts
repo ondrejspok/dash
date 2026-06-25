@@ -412,7 +412,7 @@ function atomicWriteFileSync(target: string, data: string): void {
   const tmp = `${target}.tmp-${process.pid}-${Date.now()}`;
   try {
     fs.writeFileSync(tmp, data);
-    fs.renameSync(tmp, target);
+    renameWithRetry(tmp, target);
   } catch (err) {
     try {
       fs.unlinkSync(tmp);
@@ -421,6 +421,44 @@ function atomicWriteFileSync(target: string, data: string): void {
       // creating the file, or unlink may race with another process.
     }
     throw err;
+  }
+}
+
+/** Block the current thread for `ms` without a callback (we're in sync spawn setup). */
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * Rename `tmp` over `target`, retrying transient Windows failures. On Windows,
+ * renaming over a file that an antivirus scanner, search indexer, or the
+ * just-exited Claude process still holds open throws EPERM/EBUSY/EACCES — but
+ * the lock is almost always released within a few ms. We retry briefly, and as
+ * a last resort overwrite the target in place so the hook settings still land
+ * (a failed write here previously made `claude` spawn with exitCode 1).
+ */
+function renameWithRetry(tmp: string, target: string): void {
+  const MAX_ATTEMPTS = 10;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      fs.renameSync(tmp, target);
+      return;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      const transient = code === 'EPERM' || code === 'EBUSY' || code === 'EACCES';
+      if (!transient) throw err;
+      if (attempt === MAX_ATTEMPTS) {
+        // Give up on the atomic rename; overwrite in place instead.
+        fs.writeFileSync(target, fs.readFileSync(tmp));
+        try {
+          fs.unlinkSync(tmp);
+        } catch {
+          // best-effort cleanup of the staged tmp file
+        }
+        return;
+      }
+      sleepSync(25);
+    }
   }
 }
 
