@@ -758,6 +758,17 @@ export async function startDirectPty(options: {
   });
 
   proc.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
+    // [sesh-diag] Log every Claude (direct-spawn) PTY exit so we can correlate
+    // involuntary deaths with screen-lock/suspend/GPU events. Remove once the
+    // disappearing-session trigger is confirmed.
+    console.log('[sesh-diag] claude PTY exited', {
+      id: options.id,
+      pid: proc.pid,
+      exitCode,
+      signal,
+      replaced: ptys.get(options.id) !== record,
+      at: new Date().toISOString(),
+    });
     // Skip if this PTY was replaced by a new spawn (kill+restart on reattach)
     if (ptys.get(options.id) !== record) return;
     activityMonitor.unregister(options.id);
@@ -941,6 +952,15 @@ export async function startPty(options: {
   });
 
   proc.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
+    // [sesh-diag] Shell PTY exit — logged alongside the Claude one for context.
+    console.log('[sesh-diag] shell PTY exited', {
+      id: options.id,
+      pid: proc.pid,
+      exitCode,
+      signal,
+      replaced: ptys.get(options.id) !== record,
+      at: new Date().toISOString(),
+    });
     // Skip if this PTY was replaced by a new spawn (kill+restart on reattach)
     if (ptys.get(options.id) !== record) return;
     activityMonitor.unregister(options.id);

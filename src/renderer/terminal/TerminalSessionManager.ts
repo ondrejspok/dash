@@ -8,6 +8,9 @@ import { darkTheme, lightTheme, resolveTheme } from './terminalThemes';
 
 const SNAPSHOT_DEBOUNCE_MS = 10_000;
 const MEMORY_LIMIT_BYTES = 128 * 1024 * 1024; // 128MB soft limit
+// After an involuntary Claude exit we auto-resume once; a second exit within
+// this window is treated as a crash loop and falls back to a shell instead.
+const AUTO_RESUME_COOLDOWN_MS = 8_000;
 
 export class TerminalSessionManager {
   readonly id: string;
@@ -42,6 +45,7 @@ export class TerminalSessionManager {
   private lastPtyCols = 0;
   private lastPtyRows = 0;
   private savedViewportY: number | null = null;
+  private lastAutoResumeAt = 0;
   readonly shellOnly: boolean;
   private themeId: string;
   // Claude Code's TUI rewrites cells continuously, which causes xterm to drop
@@ -776,19 +780,41 @@ export class TerminalSessionManager {
       this.debounceSaveSnapshot();
     });
 
-    // Listen for PTY exit → spawn shell fallback
+    // Listen for PTY exit. A Claude process that dies *involuntarily* (e.g. a
+    // screen lock killing the ConPTY child) should auto-resume the session via
+    // `claude --continue` rather than dropping to a bare shell and losing the
+    // conversation — that's the "disappearing sessions" complaint. A clean exit
+    // (code 0, e.g. the user ran /exit or Ctrl-D) still falls through to a shell.
     this.unsubExit = window.electronAPI.onPtyExit(this.id, (info) => {
       if (this.disposed) return;
 
-      // Show xterm's real cursor for the shell fallback
-      this.terminal.write('\x1b[?25h');
+      const now = Date.now();
+      const involuntary = (info.exitCode ?? 0) !== 0 || info.signal != null;
+      const crashLooping = now - this.lastAutoResumeAt < AUTO_RESUME_COOLDOWN_MS;
 
+      if (!this.shellOnly && involuntary && !crashLooping) {
+        this.lastAutoResumeAt = now;
+        this._isRestarting = true;
+        this.readyFired = false;
+        this.onRestartingCallback?.();
+        // Drop any buffered output from the dead PTY, then re-spawn Claude.
+        this.dataBuffer = null;
+        window.electronAPI.ptyKill(this.id);
+        this.ptyStarted = false;
+        this.startPty().then(() => {
+          this.connectPtyListeners();
+        });
+        return;
+      }
+
+      // Shell fallback: clean exit, an already-shell session, or repeated
+      // involuntary exits (crash loop) where resuming wouldn't help.
+      this.terminal.write('\x1b[?25h');
       this.terminal.writeln(`\r\n\x1b[90m[Process exited with code ${info.exitCode}]\x1b[0m\r\n`);
 
       // Ensure PTY is cleaned up in main process before spawning shell
       window.electronAPI.ptyKill(this.id);
 
-      // Spawn shell fallback
       const dims = this.fitAddon.proposeDimensions();
       window.electronAPI
         .ptyStart({
