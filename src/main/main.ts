@@ -1,4 +1,4 @@
-import { app, BrowserWindow, powerMonitor } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import * as path from 'path';
 import * as os from 'os';
 import { execFile } from 'child_process';
@@ -127,24 +127,6 @@ app.whenReady().then(async () => {
       killByOwner(mainWindow!.webContents);
     });
   });
-
-  // [sesh-diag] Correlate disappearing sessions with screen-lock / suspend /
-  // GPU / renderer-crash events. These print to the main-process console
-  // (terminal running `pnpm dev`). Remove once the trigger is confirmed.
-  const diag = (label: string, extra?: Record<string, unknown>) =>
-    console.log(`[sesh-diag] ${label}`, { at: new Date().toISOString(), ...extra });
-  powerMonitor.on('lock-screen', () => diag('powerMonitor:lock-screen'));
-  powerMonitor.on('unlock-screen', () => diag('powerMonitor:unlock-screen'));
-  powerMonitor.on('suspend', () => diag('powerMonitor:suspend'));
-  powerMonitor.on('resume', () => diag('powerMonitor:resume'));
-  mainWindow.webContents.on('render-process-gone', (_e, details) =>
-    diag('render-process-gone', { reason: details.reason, exitCode: details.exitCode }),
-  );
-  mainWindow.webContents.on('unresponsive', () => diag('webContents:unresponsive'));
-  mainWindow.webContents.on('did-start-loading', () => diag('webContents:did-start-loading'));
-  app.on('child-process-gone', (_e, details) =>
-    diag('child-process-gone', { type: details.type, reason: details.reason }),
-  );
 
   // Start activity monitor — must happen after window creation
   const { activityMonitor } = await import('./services/ActivityMonitor');
