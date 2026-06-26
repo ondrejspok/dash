@@ -11,15 +11,13 @@ export function useThresholdAlerts(
   const firedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    // Prune fired context keys for PTYs that no longer exist. Global
-    // rate-limit keys ('global:*') are kept across PTY churn.
-    for (const key of firedRef.current) {
-      if (key.startsWith('global:')) continue;
-      const ptyId = key.split(':')[0];
-      if (!statusLineData[ptyId]) {
-        firedRef.current.delete(key);
-      }
-    }
+    // NOTE: we deliberately do NOT prune fired keys when a PTY is momentarily
+    // absent from statusLineData. statusLineData is replaced wholesale on every
+    // push from main, so a PTY can briefly drop out (status-line gaps, resume/
+    // reattach churn); pruning on absence re-armed the alert and re-fired the
+    // toast every time it reappeared ("Context window at 87%" spam). The
+    // hysteresis below (value < threshold*0.9) is what legitimately re-arms an
+    // alert — e.g. after a /compact drops the context back down.
 
     const fire = (key: string, value: number, threshold: number | null, label: string) => {
       if (threshold === null || threshold <= 0) return;
