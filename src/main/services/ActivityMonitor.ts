@@ -46,12 +46,6 @@ interface PtyActivity {
   compacting: boolean;
   /** Current Claude permission mode, from hook input JSON (defaults to 'default'). */
   permissionMode: PermissionMode;
-  /** While an idle state is considered authoritative, the idle→busy self-heal
-   *  is suppressed so a task that isn't actively working (finished, idle at the
-   *  prompt, resumed) doesn't get re-flagged "busy" just because it has lingering
-   *  child processes (MCP servers, shells). Only a real busy signal
-   *  (UserPromptSubmit / PreToolUse) clears it. */
-  idleAuthoritative: boolean;
   /** Timestamp when this PTY was registered. Used to suppress idle→busy
    *  self-heal during Claude CLI startup (initialization child processes). */
   registeredAt: number;
@@ -75,6 +69,11 @@ const DIRECT_SPAWN_CHILDLESS_HARD_LIMIT_MS = 45_000;
  *  (which last < 1s) while recovering from missed busy hooks or mid-response
  *  stop hooks that fired between chained tool calls. */
 const IDLE_TO_BUSY_GRACE_MS = 4000;
+
+/** Terminal output within this window counts as "actively streaming" — the
+ *  signal the idle→busy self-heal uses to tell real work from an idle prompt
+ *  that merely has lingering child processes. */
+const IDLE_TO_BUSY_OUTPUT_MS = 1500;
 
 /** How long (ms) after PTY registration before the idle→busy polling
  *  self-heal is allowed. During Claude CLI startup, initialization child
@@ -159,9 +158,6 @@ class ActivityMonitorImpl {
       error: null,
       compacting: false,
       permissionMode: 'default',
-      // Start authoritative: a freshly-registered task is idle at the prompt,
-      // not working. It only becomes non-authoritative on a real busy signal.
-      idleAuthoritative: true,
       registeredAt: now,
       pendingBusyTimer: null,
     });
@@ -213,9 +209,6 @@ class ActivityMonitorImpl {
       clearTimeout(activity.pendingBusyTimer);
       activity.pendingBusyTimer = null;
     }
-    // Stop/idle hook is authoritative "done" — suppress the idle→busy self-heal
-    // so leftover child processes don't re-flag the task busy.
-    activity.idleAuthoritative = true;
     if (activity.state === 'idle') return;
     activity.state = 'idle';
     activity.lastStatusLineTime = 0;
@@ -244,7 +237,6 @@ class ActivityMonitorImpl {
       activity.state = 'busy';
       activity.lastChildSeenTime = Date.now();
       activity.idleChildrenSince = 0;
-      activity.idleAuthoritative = false;
       activity.error = null;
       this.emitAll();
     }, BUSY_DEBOUNCE_MS);
@@ -300,7 +292,6 @@ class ActivityMonitorImpl {
     if (activity.state !== 'busy') {
       activity.state = 'busy';
       activity.idleChildrenSince = 0;
-      activity.idleAuthoritative = false;
       activity.error = null;
     }
 
@@ -439,18 +430,16 @@ class ActivityMonitorImpl {
         // "waiting for approval" flicker into "busy", which is exactly what made
         // waiting/in-progress indistinguishable.
 
-        // Delayed self-heal: idle → busy when children are continuously present
-        // for IDLE_TO_BUSY_GRACE_MS — recovers from a missed busy hook. Skipped
-        // when the idle state came from an authoritative Stop hook (a finished
-        // task with lingering MCP/shell children must not pulse), and during the
-        // startup grace period (Claude CLI init children).
+        // Delayed self-heal: idle → busy only when Claude is *actively producing
+        // terminal output* (streaming a response / tool results) and has stayed
+        // that way for IDLE_TO_BUSY_GRACE_MS. This is the fallback for a missed
+        // busy hook. We key it on sustained output, NOT child-process presence:
+        // a task idle at the prompt keeps persistent MCP/shell children but emits
+        // no output, so child-presence used to falsely pulse idle tasks. A brief
+        // final render after finishing is too short to clear the grace window.
         const pastStartup = Date.now() - activity.registeredAt > STARTUP_GRACE_MS;
-        if (
-          activity.state === 'idle' &&
-          hasChildren &&
-          pastStartup &&
-          !activity.idleAuthoritative
-        ) {
+        const streaming = Date.now() - activity.lastPtyOutputTime < IDLE_TO_BUSY_OUTPUT_MS;
+        if (activity.state === 'idle' && streaming && pastStartup) {
           if (activity.idleChildrenSince === 0) {
             activity.idleChildrenSince = Date.now();
           } else if (Date.now() - activity.idleChildrenSince > IDLE_TO_BUSY_GRACE_MS) {
@@ -458,8 +447,7 @@ class ActivityMonitorImpl {
             activity.idleChildrenSince = 0;
             changed = true;
           }
-        }
-        if (activity.state === 'idle' && !hasChildren) {
+        } else if (activity.state === 'idle') {
           activity.idleChildrenSince = 0;
         }
 
@@ -484,8 +472,6 @@ class ActivityMonitorImpl {
             activity.state = 'idle';
             activity.tool = null;
             activity.compacting = false;
-            // Idle reached via timeout is still "not working" — keep it steady.
-            activity.idleAuthoritative = true;
             changed = true;
           }
         }
