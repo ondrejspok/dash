@@ -24,10 +24,26 @@ import type {
   RemoteControlState,
   ContextUsage,
   ActivityInfo,
+  ActivityState,
 } from '../../shared/types';
 import { IconButton } from './ui/IconButton';
 import { Tooltip } from './ui/Tooltip';
 import { TaskStatusGlyph } from './ui/TaskStatusGlyph';
+
+/** Left-edge accent color for a task row. Any non-working state gets a bar so
+ *  it's scannable; working (busy) shows none (the glyph pulses instead). */
+function accentBarClass(state: ActivityState | undefined): string {
+  switch (state) {
+    case 'waiting':
+      return 'bg-orange-500';
+    case 'error':
+      return 'bg-destructive';
+    case 'idle':
+      return 'bg-blue-400';
+    default:
+      return ''; // busy or no activity → no accent
+  }
+}
 
 /* ── Rotation (Active Tasks) with sliding highlight ──────── */
 
@@ -122,10 +138,9 @@ function RotationSection({
           const isActiveTask = task.id === activeTaskId;
           const project = projects.find((p) => p.id === task.projectId);
           const ctx = contextUsage[task.id];
-          const isUnread =
-            !isActiveTask &&
-            (activity === 'waiting' ||
-              (activity === 'idle' && (unseenTaskIds?.has(task.id) ?? false)));
+          // Accent bar for any non-working state (waiting / finished / error).
+          // Working (busy) shows NO bar — it pulses the glyph instead.
+          const accentColor = accentBarClass(activity);
 
           return (
             <div
@@ -140,23 +155,16 @@ function RotationSection({
               } ${draggingRotId === task.id ? 'opacity-40' : ''}`}
               onClick={() => onSelectTask(task.projectId, task.id)}
             >
-              {/* Unread accent bar: needs-you (orange) / finished-unseen (blue) */}
-              {isUnread && (
+              {accentColor && (
                 <span
                   aria-hidden
-                  className={`absolute left-0 top-1 bottom-1 w-[2.5px] rounded-full ${
-                    activity === 'waiting' ? 'bg-orange-500' : 'bg-blue-400'
-                  }`}
+                  className={`absolute left-0 top-1 bottom-1 w-[2.5px] rounded-full ${accentColor}`}
                 />
               )}
               {/* Status indicator: mode shape + activity color/pulse */}
-              <TaskStatusGlyph info={activityInfo} unseen={unseenTaskIds?.has(task.id)} />
+              <TaskStatusGlyph info={activityInfo} />
 
-              <span
-                className={`truncate flex-1 ${isUnread ? 'font-semibold text-foreground' : ''}`}
-              >
-                {taskDisplayName(task)}
-              </span>
+              <span className="truncate flex-1">{taskDisplayName(task)}</span>
               {ctx && ctx.percentage > 0 && (
                 <span
                   className={`text-[9px] tabular-nums flex-shrink-0 ${
@@ -631,13 +639,8 @@ export function LeftSidebar({
                         const activityState = activityInfo?.state;
                         const isActiveTask = task.id === activeTaskId;
                         const ctx = contextUsage[task.id];
-
-                        // "Unread" (messenger-style): the task wants your attention
-                        // and you're not already looking at it. Bolds the name.
-                        const isUnread =
-                          !isActiveTask &&
-                          (activityState === 'waiting' ||
-                            (activityState === 'idle' && (unseenTaskIds?.has(task.id) ?? false)));
+                        // Accent bar for any non-working state; busy pulses instead.
+                        const accentColor = accentBarClass(activityState);
 
                         return (
                           <div
@@ -651,21 +654,15 @@ export function LeftSidebar({
                             } ${draggingTaskId === task.id ? 'opacity-40' : ''}`}
                             onClick={() => onSelectTask(project.id, task.id)}
                           >
-                            {/* Unread accent bar: needs-you (orange) / finished-unseen (blue) */}
-                            {isUnread && (
+                            {accentColor && (
                               <span
                                 aria-hidden
-                                className={`absolute left-0 top-1 bottom-1 w-[2.5px] rounded-full ${
-                                  activityState === 'waiting' ? 'bg-orange-500' : 'bg-blue-400'
-                                }`}
+                                className={`absolute left-0 top-1 bottom-1 w-[2.5px] rounded-full ${accentColor}`}
                               />
                             )}
                             <div className="flex items-center gap-2">
                               {/* Status indicator: mode shape + activity color/pulse */}
-                              <TaskStatusGlyph
-                                info={activityInfo}
-                                unseen={unseenTaskIds?.has(task.id)}
-                              />
+                              <TaskStatusGlyph info={activityInfo} />
                               {remoteControlStates[task.id] && (
                                 <Globe
                                   size={10}
@@ -674,13 +671,7 @@ export function LeftSidebar({
                                 />
                               )}
 
-                              <span
-                                className={`truncate flex-1 ${
-                                  isUnread ? 'font-semibold text-foreground' : ''
-                                }`}
-                              >
-                                {taskDisplayName(task)}
-                              </span>
+                              <span className="truncate flex-1">{taskDisplayName(task)}</span>
 
                               {/* Context percentage (visible when data available, hidden on hover to show actions) */}
                               {ctx && ctx.percentage > 0 && (

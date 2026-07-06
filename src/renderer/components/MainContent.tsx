@@ -234,10 +234,6 @@ export function MainContent({
           <div className="flex items-center gap-0.5 overflow-x-auto scrollbar-none flex-1 min-w-0">
             {tasks.map((task, i) => {
               const activityInfo = taskActivity[task.id];
-              const isUnread =
-                task.id !== activeTaskId &&
-                (activityInfo?.state === 'waiting' ||
-                  (activityInfo?.state === 'idle' && (unseenTaskIds?.has(task.id) ?? false)));
               return (
               <button
                 key={task.id}
@@ -248,14 +244,8 @@ export function MainContent({
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                 }`}
               >
-                <TaskStatusGlyph info={activityInfo} unseen={unseenTaskIds?.has(task.id)} size={11} />
-                <span
-                  className={`truncate max-w-[140px] ${
-                    isUnread ? 'font-semibold text-foreground' : ''
-                  }`}
-                >
-                  {taskDisplayName(task)}
-                </span>
+                <TaskStatusGlyph info={activityInfo} size={11} />
+                <span className="truncate max-w-[140px]">{taskDisplayName(task)}</span>
                 {i < 9 && (
                   <div className="flex items-center gap-[2px] ml-1">
                     <kbd className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-[3px] text-[9px] font-medium leading-none border border-border/80 bg-gradient-to-b from-white/[0.06] to-transparent text-foreground/50 shadow-[0_0.5px_0_0.5px_hsl(var(--border)/0.4),inset_0_0.5px_0_hsl(var(--foreground)/0.04)] font-mono">
