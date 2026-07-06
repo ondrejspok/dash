@@ -360,19 +360,15 @@ export function App() {
     localStorage.setItem('unseenTaskIds', JSON.stringify([...unseenTaskIds]));
   }, [unseenTaskIds]);
 
-  // Clear a task's "finished/unseen" marker when you move ON to a different
-  // task — NOT the instant you open it. Clearing on open made the blue marker
-  // vanish the moment you glanced at a task, so you'd lose track of what had
-  // finished. Now it persists until you actually switch away from it.
-  const prevActiveForUnseenRef = useRef<string | null>(activeTaskId);
+  // Mark a task "read" when you open it: its finished accent fades from blue to
+  // neutral (the bar stays, so you still see it finished — it just no longer
+  // reads as unread).
   useEffect(() => {
-    const prev = prevActiveForUnseenRef.current;
-    prevActiveForUnseenRef.current = activeTaskId;
-    if (!prev || prev === activeTaskId) return;
-    setUnseenTaskIds((s) => {
-      if (!s.has(prev)) return s;
-      const next = new Set(s);
-      next.delete(prev);
+    if (!activeTaskId) return;
+    setUnseenTaskIds((prev) => {
+      if (!prev.has(activeTaskId)) return prev;
+      const next = new Set(prev);
+      next.delete(activeTaskId);
       return next;
     });
   }, [activeTaskId]);

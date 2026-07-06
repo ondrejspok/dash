@@ -31,15 +31,16 @@ import { Tooltip } from './ui/Tooltip';
 import { TaskStatusGlyph } from './ui/TaskStatusGlyph';
 
 /** Left-edge accent color for a task row. Any non-working state gets a bar so
- *  it's scannable; working (busy) shows none (the glyph pulses instead). */
-function accentBarClass(state: ActivityState | undefined): string {
+ *  it's scannable; working (busy) shows none (the glyph pulses instead).
+ *  A finished task is blue until you've opened it, then fades to a neutral bar. */
+function accentBarClass(state: ActivityState | undefined, unseen: boolean): string {
   switch (state) {
     case 'waiting':
       return 'bg-orange-500';
     case 'error':
       return 'bg-destructive';
     case 'idle':
-      return 'bg-blue-400';
+      return unseen ? 'bg-blue-400' : 'bg-foreground/25';
     default:
       return ''; // busy or no activity → no accent
   }
@@ -140,7 +141,7 @@ function RotationSection({
           const ctx = contextUsage[task.id];
           // Accent bar for any non-working state (waiting / finished / error).
           // Working (busy) shows NO bar — it pulses the glyph instead.
-          const accentColor = accentBarClass(activity);
+          const accentColor = accentBarClass(activity, unseenTaskIds?.has(task.id) ?? false);
 
           return (
             <div
@@ -640,7 +641,10 @@ export function LeftSidebar({
                         const isActiveTask = task.id === activeTaskId;
                         const ctx = contextUsage[task.id];
                         // Accent bar for any non-working state; busy pulses instead.
-                        const accentColor = accentBarClass(activityState);
+                        const accentColor = accentBarClass(
+                          activityState,
+                          unseenTaskIds?.has(task.id) ?? false,
+                        );
 
                         return (
                           <div
