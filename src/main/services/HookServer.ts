@@ -209,17 +209,31 @@ class HookServerImpl {
                 typeof payload.notification_type === 'string' ? payload.notification_type : '';
               const message = typeof payload.message === 'string' ? payload.message : undefined;
 
-              if (notificationType === 'permission_prompt') {
+              // Notification types that mean "Claude needs your input" → waiting.
+              // permission_prompt: approve a tool. elicitation_dialog: an MCP
+              // server is asking for input. agent_needs_input: a background
+              // session is blocked on you (Claude Code 2.1.198+).
+              const needsInput =
+                notificationType === 'permission_prompt' ||
+                notificationType === 'elicitation_dialog' ||
+                notificationType === 'agent_needs_input';
+              // Types that mean "done / waiting for your next prompt".
+              const isDone =
+                notificationType === 'idle_prompt' || notificationType === 'agent_completed';
+
+              if (needsInput) {
                 activityMonitor.setWaitingForPermission(ptyId);
                 const taskName = this.getTaskName(ptyId);
                 const notifBody = message
                   ? `${taskName}: ${message}`
-                  : `${taskName} needs permission`;
+                  : `${taskName} needs your input`;
                 this.showDesktopNotification(ptyId, notifBody);
-              } else if (notificationType === 'idle_prompt') {
+              } else if (isDone) {
                 activityMonitor.setIdle(ptyId);
                 this.showDesktopNotification(ptyId);
               }
+              // Other types (auth_success, elicitation_complete/response) are
+              // side-effect-free and intentionally ignored.
 
               res.writeHead(200);
               res.end();

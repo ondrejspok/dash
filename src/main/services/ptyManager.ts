@@ -525,10 +525,12 @@ function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
   const dashEntries: Partial<Record<DashHookEvent, HookEntry[]>> = {
     Stop: [{ matcher: '', hooks: [dashHttp('stop')] }],
     UserPromptSubmit: [{ matcher: '', hooks: [dashHttp('busy')] }],
-    Notification: [
-      { matcher: 'permission_prompt', hooks: [dashHttp('notification')] },
-      { matcher: 'idle_prompt', hooks: [dashHttp('notification')] },
-    ],
+    // Catch-all so every notification_type reaches us (permission_prompt,
+    // idle_prompt, elicitation_dialog, agent_needs_input, agent_completed, …);
+    // the server classifies which ones mean "needs input" vs "done". A
+    // per-type matcher list silently dropped the input-needing types Claude
+    // added later, so waiting/done was incomplete.
+    Notification: [{ matcher: '*', hooks: [dashHttp('notification')] }],
     PreToolUse: buildPreToolUseHooks(httpHook),
     PostToolUse: [{ matcher: '*', hooks: [dashHttp('tool-end', true)] }],
     PreCompact: [{ matcher: '*', hooks: [dashHttp('compact-start', true)] }],
