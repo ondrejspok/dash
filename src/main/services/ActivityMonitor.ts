@@ -46,6 +46,14 @@ interface PtyActivity {
   compacting: boolean;
   /** Current Claude permission mode, from hook input JSON (defaults to 'default'). */
   permissionMode: PermissionMode;
+  /** Set true by the Stop/idle hook (Claude authoritatively finished). While set,
+   *  the idle→busy self-heal is suppressed so background noise — a task's own
+   *  long-running process emitting output (dev server, auto-refresh, tail -f) or
+   *  lingering child processes — can't re-flag a finished task "busy". Cleared by
+   *  a real busy signal (UserPromptSubmit / PreToolUse). Deliberately NOT set at
+   *  register or by the polling safety-valve, so a genuinely-working task whose
+   *  busy hook was missed can still self-heal. */
+  idleAuthoritative: boolean;
   /** Timestamp when this PTY was registered. Used to suppress idle→busy
    *  self-heal during Claude CLI startup (initialization child processes). */
   registeredAt: number;
@@ -158,6 +166,7 @@ class ActivityMonitorImpl {
       error: null,
       compacting: false,
       permissionMode: 'default',
+      idleAuthoritative: false,
       registeredAt: now,
       pendingBusyTimer: null,
     });
@@ -209,6 +218,9 @@ class ActivityMonitorImpl {
       clearTimeout(activity.pendingBusyTimer);
       activity.pendingBusyTimer = null;
     }
+    // Authoritative "done": suppress the idle→busy self-heal so a finished
+    // task's background output/children can't re-flag it busy.
+    activity.idleAuthoritative = true;
     if (activity.state === 'idle') return;
     activity.state = 'idle';
     activity.lastStatusLineTime = 0;
@@ -237,6 +249,7 @@ class ActivityMonitorImpl {
       activity.state = 'busy';
       activity.lastChildSeenTime = Date.now();
       activity.idleChildrenSince = 0;
+      activity.idleAuthoritative = false;
       activity.error = null;
       this.emitAll();
     }, BUSY_DEBOUNCE_MS);
@@ -292,6 +305,7 @@ class ActivityMonitorImpl {
     if (activity.state !== 'busy') {
       activity.state = 'busy';
       activity.idleChildrenSince = 0;
+      activity.idleAuthoritative = false;
       activity.error = null;
     }
 
@@ -439,7 +453,7 @@ class ActivityMonitorImpl {
         // final render after finishing is too short to clear the grace window.
         const pastStartup = Date.now() - activity.registeredAt > STARTUP_GRACE_MS;
         const streaming = Date.now() - activity.lastPtyOutputTime < IDLE_TO_BUSY_OUTPUT_MS;
-        if (activity.state === 'idle' && streaming && pastStartup) {
+        if (activity.state === 'idle' && streaming && pastStartup && !activity.idleAuthoritative) {
           if (activity.idleChildrenSince === 0) {
             activity.idleChildrenSince = Date.now();
           } else if (Date.now() - activity.idleChildrenSince > IDLE_TO_BUSY_GRACE_MS) {
