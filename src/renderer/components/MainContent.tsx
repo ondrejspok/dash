@@ -274,7 +274,7 @@ export function MainContent({
       ) : (
         <>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <div className="w-[7px] h-[7px] rounded-full bg-[hsl(var(--git-added))] status-pulse flex-shrink-0" />
+            <TaskStatusGlyph info={taskActivity[activeTask.id]} size={12} />
             <span className="text-[13px] font-medium text-foreground whitespace-nowrap">
               {taskDisplayName(activeTask)}
             </span>
