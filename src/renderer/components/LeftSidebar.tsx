@@ -27,6 +27,7 @@ import type {
 } from '../../shared/types';
 import { IconButton } from './ui/IconButton';
 import { Tooltip } from './ui/Tooltip';
+import { TaskStatusGlyph } from './ui/TaskStatusGlyph';
 
 /* ── Rotation (Active Tasks) with sliding highlight ──────── */
 
@@ -116,10 +117,14 @@ function RotationSection({
           />
         )}
         {rotationTasks.map((task) => {
-          const activity = taskActivity[task.id]?.state;
+          const activityInfo = taskActivity[task.id];
+          const activity = activityInfo?.state;
           const isActiveTask = task.id === activeTaskId;
           const project = projects.find((p) => p.id === task.projectId);
           const ctx = contextUsage[task.id];
+          const isUnread =
+            !isActiveTask &&
+            (activity === 'waiting' || (unseenTaskIds?.has(task.id) ?? false));
 
           return (
             <div
@@ -134,20 +139,14 @@ function RotationSection({
               } ${draggingRotId === task.id ? 'opacity-40' : ''}`}
               onClick={() => onSelectTask(task.projectId, task.id)}
             >
-              {/* Status indicator */}
-              {activity === 'error' ? (
-                <div className="w-[6px] h-[6px] rounded-full bg-destructive flex-shrink-0" />
-              ) : activity === 'waiting' ? (
-                <div className="w-[6px] h-[6px] rounded-full bg-orange-500 flex-shrink-0" />
-              ) : activity === 'busy' ? (
-                <div className="w-[6px] h-[6px] rounded-full bg-amber-400 status-pulse flex-shrink-0" />
-              ) : activity === 'idle' && unseenTaskIds?.has(task.id) ? (
-                <div className="w-[6px] h-[6px] rounded-full bg-blue-400 flex-shrink-0" />
-              ) : activity === 'idle' ? (
-                <div className="w-[6px] h-[6px] rounded-full bg-emerald-400 flex-shrink-0" />
-              ) : null}
+              {/* Status indicator: mode shape + activity color/pulse */}
+              <TaskStatusGlyph info={activityInfo} unseen={unseenTaskIds?.has(task.id)} />
 
-              <span className="truncate flex-1">{taskDisplayName(task)}</span>
+              <span
+                className={`truncate flex-1 ${isUnread ? 'font-semibold text-foreground' : ''}`}
+              >
+                {taskDisplayName(task)}
+              </span>
               {ctx && ctx.percentage > 0 && (
                 <span
                   className={`text-[9px] tabular-nums flex-shrink-0 ${
@@ -623,21 +622,11 @@ export function LeftSidebar({
                         const isActiveTask = task.id === activeTaskId;
                         const ctx = contextUsage[task.id];
 
-                        // Build tooltip text with tool details when available
-                        const busyTooltip = activityInfo?.compacting
-                          ? 'Compacting context...'
-                          : activityInfo?.tool?.label
-                            ? activityInfo.tool.label
-                            : 'Claude is working';
-                        const errorTooltip = activityInfo?.error
-                          ? activityInfo.error.type === 'rate_limit'
-                            ? 'Rate limited'
-                            : activityInfo.error.type === 'auth_error'
-                              ? 'Authentication error'
-                              : activityInfo.error.type === 'billing_error'
-                                ? 'Billing error'
-                                : 'Error'
-                          : 'Error';
+                        // "Unread" (messenger-style): the task wants your attention
+                        // and you're not already looking at it. Bolds the name.
+                        const isUnread =
+                          !isActiveTask &&
+                          (activityState === 'waiting' || (unseenTaskIds?.has(task.id) ?? false));
 
                         return (
                           <div
@@ -652,28 +641,11 @@ export function LeftSidebar({
                             onClick={() => onSelectTask(project.id, task.id)}
                           >
                             <div className="flex items-center gap-2">
-                              {/* Status indicator */}
-                              {activityState === 'error' ? (
-                                <Tooltip content={errorTooltip}>
-                                  <div className="w-[6px] h-[6px] rounded-full bg-destructive flex-shrink-0" />
-                                </Tooltip>
-                              ) : activityState === 'waiting' ? (
-                                <Tooltip content="Waiting for user">
-                                  <div className="w-[6px] h-[6px] rounded-full bg-orange-500 flex-shrink-0" />
-                                </Tooltip>
-                              ) : activityState === 'busy' ? (
-                                <Tooltip content={busyTooltip}>
-                                  <div className="w-[6px] h-[6px] rounded-full bg-amber-400 status-pulse flex-shrink-0" />
-                                </Tooltip>
-                              ) : activityState === 'idle' && unseenTaskIds?.has(task.id) ? (
-                                <Tooltip content="Done (unseen)">
-                                  <div className="w-[6px] h-[6px] rounded-full bg-blue-400 flex-shrink-0" />
-                                </Tooltip>
-                              ) : activityState === 'idle' ? (
-                                <Tooltip content="Idle">
-                                  <div className="w-[6px] h-[6px] rounded-full bg-emerald-400 flex-shrink-0" />
-                                </Tooltip>
-                              ) : null}
+                              {/* Status indicator: mode shape + activity color/pulse */}
+                              <TaskStatusGlyph
+                                info={activityInfo}
+                                unseen={unseenTaskIds?.has(task.id)}
+                              />
                               {remoteControlStates[task.id] && (
                                 <Globe
                                   size={10}
@@ -682,7 +654,13 @@ export function LeftSidebar({
                                 />
                               )}
 
-                              <span className="truncate flex-1">{taskDisplayName(task)}</span>
+                              <span
+                                className={`truncate flex-1 ${
+                                  isUnread ? 'font-semibold text-foreground' : ''
+                                }`}
+                              >
+                                {taskDisplayName(task)}
+                              </span>
 
                               {/* Context percentage (visible when data available, hidden on hover to show actions) */}
                               {ctx && ctx.percentage > 0 && (

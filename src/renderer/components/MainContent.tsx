@@ -21,6 +21,7 @@ import type {
 } from '../../shared/types';
 import { linkedItemUrl, isAdoRemote, branchUrl } from '../../shared/urls';
 import { Tooltip } from './ui/Tooltip';
+import { TaskStatusGlyph } from './ui/TaskStatusGlyph';
 
 function LinkedItemBadges({
   items,
@@ -231,7 +232,12 @@ export function MainContent({
       {sidebarCollapsed && tasks.length > 0 ? (
         <>
           <div className="flex items-center gap-0.5 overflow-x-auto scrollbar-none flex-1 min-w-0">
-            {tasks.map((task, i) => (
+            {tasks.map((task, i) => {
+              const activityInfo = taskActivity[task.id];
+              const isUnread =
+                task.id !== activeTaskId &&
+                (activityInfo?.state === 'waiting' || (unseenTaskIds?.has(task.id) ?? false));
+              return (
               <button
                 key={task.id}
                 onClick={() => onSelectTask?.(task.id)}
@@ -241,22 +247,14 @@ export function MainContent({
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                 }`}
               >
+                <TaskStatusGlyph info={activityInfo} unseen={unseenTaskIds?.has(task.id)} size={11} />
                 <span
-                  className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                    taskActivity[task.id]?.state === 'error'
-                      ? 'bg-destructive'
-                      : taskActivity[task.id]?.state === 'waiting'
-                        ? 'bg-orange-500'
-                        : taskActivity[task.id]?.state === 'busy'
-                          ? 'bg-amber-400 animate-pulse'
-                          : taskActivity[task.id]?.state === 'idle' && unseenTaskIds?.has(task.id)
-                            ? 'bg-blue-400'
-                            : taskActivity[task.id]?.state === 'idle'
-                              ? 'bg-green-400'
-                              : 'bg-muted-foreground/30'
+                  className={`truncate max-w-[140px] ${
+                    isUnread ? 'font-semibold text-foreground' : ''
                   }`}
-                />
-                <span className="truncate max-w-[140px]">{taskDisplayName(task)}</span>
+                >
+                  {taskDisplayName(task)}
+                </span>
                 {i < 9 && (
                   <div className="flex items-center gap-[2px] ml-1">
                     <kbd className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-[3px] text-[9px] font-medium leading-none border border-border/80 bg-gradient-to-b from-white/[0.06] to-transparent text-foreground/50 shadow-[0_0.5px_0_0.5px_hsl(var(--border)/0.4),inset_0_0.5px_0_hsl(var(--foreground)/0.04)] font-mono">
@@ -268,14 +266,15 @@ export function MainContent({
                   </div>
                 )}
               </button>
-            ))}
+              );
+            })}
           </div>
           {branchBadge}
         </>
       ) : (
         <>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <div className="w-[7px] h-[7px] rounded-full bg-[hsl(var(--git-added))] status-pulse flex-shrink-0" />
+            <TaskStatusGlyph info={taskActivity[activeTask.id]} size={12} />
             <span className="text-[13px] font-medium text-foreground whitespace-nowrap">
               {taskDisplayName(activeTask)}
             </span>

@@ -129,6 +129,25 @@ class HookServerImpl {
     });
   }
 
+  /**
+   * Every Claude hook body carries the current `permission_mode` (plan / auto /
+   * etc.). Forward it to the activity monitor so the sidebar can show each
+   * task's live mode. (statusLine JSON does NOT include it, so hooks are the
+   * only source.) No-ops on unknown/missing values.
+   */
+  private notePermissionMode(ptyId: string, payload: Record<string, unknown>): void {
+    // Secondary/best-effort: this must NEVER interfere with the primary hook
+    // action (setIdle / setWaitingForPermission / desktop notification). The
+    // hook callback is wrapped in a try/catch that would otherwise skip those,
+    // so swallow any error here.
+    try {
+      const mode = payload.permission_mode;
+      if (typeof mode === 'string') activityMonitor.setPermissionMode(ptyId, mode);
+    } catch (err) {
+      console.error('[HookServer] notePermissionMode failed:', err);
+    }
+  }
+
   async start(): Promise<number> {
     if (this.server) return this._port;
 
@@ -163,7 +182,8 @@ class HookServerImpl {
           // injecting text into Claude's conversation context.
 
           if (pathname === '/hook/stop') {
-            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
+              this.notePermissionMode(ptyId, payload);
               activityMonitor.setIdle(ptyId);
               this.showDesktopNotification(ptyId);
               res.writeHead(200);
@@ -173,7 +193,8 @@ class HookServerImpl {
           }
 
           if (pathname === '/hook/busy') {
-            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
+              this.notePermissionMode(ptyId, payload);
               activityMonitor.setBusy(ptyId);
               res.writeHead(200);
               res.end();
@@ -183,6 +204,7 @@ class HookServerImpl {
 
           if (pathname === '/hook/notification') {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
+              this.notePermissionMode(ptyId, payload);
               const notificationType =
                 typeof payload.notification_type === 'string' ? payload.notification_type : '';
               const message = typeof payload.message === 'string' ? payload.message : undefined;
@@ -218,6 +240,7 @@ class HookServerImpl {
 
           if (pathname === '/hook/tool-start') {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
+              this.notePermissionMode(ptyId, payload);
               const toolName =
                 typeof payload.tool_name === 'string' ? payload.tool_name : 'unknown';
               const toolInput =
@@ -232,7 +255,8 @@ class HookServerImpl {
           }
 
           if (pathname === '/hook/tool-end') {
-            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
+              this.notePermissionMode(ptyId, payload);
               activityMonitor.setToolEnd(ptyId);
               res.writeHead(200);
               res.end();
