@@ -54,6 +54,10 @@ export class TerminalSessionManager {
   // the last non-empty selection on every change so Ctrl+Shift+C / Cmd+C can
   // still copy it even after xterm has cleared the highlight.
   private lastSelection = '';
+  // Copy-on-select bookkeeping (Claude terminals): whether the current drag
+  // produced a selection, and whether the mouseup listener is wired.
+  private copySelectionSeen = false;
+  private copyOnSelectBound = false;
   constructor(opts: {
     id: string;
     cwd: string;
@@ -124,7 +128,10 @@ export class TerminalSessionManager {
     // user drags, which clears xterm's selection before the copy shortcut fires.
     this.terminal.onSelectionChange(() => {
       const sel = this.terminal.getSelection();
-      if (sel) this.lastSelection = sel;
+      if (sel) {
+        this.lastSelection = sel;
+        this.copySelectionSeen = true;
+      }
     });
 
     // Capture Claude Code's terminal title (OSC 0/2). Only for the Claude
@@ -279,6 +286,29 @@ export class TerminalSessionManager {
       // Windows: pad right so fit addon leaves room for the scrollbar.
       if (this.terminal.element && window.electronAPI.getPlatform() === 'win32') {
         this.terminal.element.style.paddingRight = '24px';
+      }
+
+      // Copy-on-select: when a drag-selection finishes (mouseup), copy it to the
+      // clipboard immediately — before Claude's TUI redraw can clear the
+      // highlight. This is why select→Ctrl+Shift+C was flaky (worse for larger
+      // selections spanning more rewritten lines). Uses the live selection, or
+      // the cached one if a selection was seen during this drag but already
+      // cleared. Plain clicks (no selection this drag) never copy, so the
+      // clipboard isn't clobbered on every click.
+      if (this.terminal.element && !this.copyOnSelectBound) {
+        this.copyOnSelectBound = true;
+        const el = this.terminal.element;
+        el.addEventListener('mousedown', () => {
+          this.copySelectionSeen = false;
+        });
+        el.addEventListener('mouseup', () => {
+          const sel =
+            this.terminal.getSelection() || (this.copySelectionSeen ? this.lastSelection : '');
+          if (sel && sel.trim()) {
+            window.electronAPI.clipboardWriteText(sel);
+          }
+          this.copySelectionSeen = false;
+        });
       }
       // Load GPU addon after terminal is in DOM
       await this.loadGpuAddon();
