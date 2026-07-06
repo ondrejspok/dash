@@ -236,7 +236,8 @@ export function MainContent({
               const activityInfo = taskActivity[task.id];
               const isUnread =
                 task.id !== activeTaskId &&
-                (activityInfo?.state === 'waiting' || (unseenTaskIds?.has(task.id) ?? false));
+                (activityInfo?.state === 'waiting' ||
+                  (activityInfo?.state === 'idle' && (unseenTaskIds?.has(task.id) ?? false)));
               return (
               <button
                 key={task.id}

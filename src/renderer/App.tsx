@@ -360,13 +360,19 @@ export function App() {
     localStorage.setItem('unseenTaskIds', JSON.stringify([...unseenTaskIds]));
   }, [unseenTaskIds]);
 
-  // Clear unseen when a task becomes active
+  // Clear a task's "finished/unseen" marker when you move ON to a different
+  // task — NOT the instant you open it. Clearing on open made the blue marker
+  // vanish the moment you glanced at a task, so you'd lose track of what had
+  // finished. Now it persists until you actually switch away from it.
+  const prevActiveForUnseenRef = useRef<string | null>(activeTaskId);
   useEffect(() => {
-    if (!activeTaskId) return;
-    setUnseenTaskIds((prev) => {
-      if (!prev.has(activeTaskId)) return prev;
-      const next = new Set(prev);
-      next.delete(activeTaskId);
+    const prev = prevActiveForUnseenRef.current;
+    prevActiveForUnseenRef.current = activeTaskId;
+    if (!prev || prev === activeTaskId) return;
+    setUnseenTaskIds((s) => {
+      if (!s.has(prev)) return s;
+      const next = new Set(s);
+      next.delete(prev);
       return next;
     });
   }, [activeTaskId]);

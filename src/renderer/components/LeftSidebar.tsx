@@ -124,7 +124,8 @@ function RotationSection({
           const ctx = contextUsage[task.id];
           const isUnread =
             !isActiveTask &&
-            (activity === 'waiting' || (unseenTaskIds?.has(task.id) ?? false));
+            (activity === 'waiting' ||
+              (activity === 'idle' && (unseenTaskIds?.has(task.id) ?? false)));
 
           return (
             <div
@@ -635,7 +636,8 @@ export function LeftSidebar({
                         // and you're not already looking at it. Bolds the name.
                         const isUnread =
                           !isActiveTask &&
-                          (activityState === 'waiting' || (unseenTaskIds?.has(task.id) ?? false));
+                          (activityState === 'waiting' ||
+                            (activityState === 'idle' && (unseenTaskIds?.has(task.id) ?? false)));
 
                         return (
                           <div
