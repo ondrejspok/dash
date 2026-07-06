@@ -1,7 +1,22 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type { WebContents } from 'electron';
-import type { ActivityState, ActivityInfo, ToolActivity, ActivityError } from '@shared/types';
+import type {
+  ActivityState,
+  ActivityInfo,
+  ToolActivity,
+  ActivityError,
+  PermissionMode,
+} from '@shared/types';
+
+const PERMISSION_MODES: readonly PermissionMode[] = [
+  'default',
+  'plan',
+  'acceptEdits',
+  'auto',
+  'dontAsk',
+  'bypassPermissions',
+];
 
 const execFileAsync = promisify(execFile);
 
@@ -29,6 +44,8 @@ interface PtyActivity {
   error: ActivityError | null;
   /** Whether context is being compacted. */
   compacting: boolean;
+  /** Current Claude permission mode, from hook input JSON (defaults to 'default'). */
+  permissionMode: PermissionMode;
   /** Timestamp when this PTY was registered. Used to suppress idle→busy
    *  self-heal during Claude CLI startup (initialization child processes). */
   registeredAt: number;
@@ -135,6 +152,7 @@ class ActivityMonitorImpl {
       tool: null,
       error: null,
       compacting: false,
+      permissionMode: 'default',
       registeredAt: now,
       pendingBusyTimer: null,
     });
@@ -228,6 +246,20 @@ class ActivityMonitorImpl {
     if (!activity || activity.state === 'waiting') return;
     activity.state = 'waiting';
     activity.tool = null;
+    this.emitAll();
+  }
+
+  /**
+   * Update the PTY's Claude permission mode (plan / auto / etc.). Called by
+   * HookServer with the `permission_mode` field present in every hook body.
+   * Ignores unknown values and no-op updates to avoid needless broadcasts.
+   */
+  setPermissionMode(ptyId: string, mode: string): void {
+    const activity = this.activities.get(ptyId);
+    if (!activity) return;
+    if (!PERMISSION_MODES.includes(mode as PermissionMode)) return;
+    if (activity.permissionMode === mode) return;
+    activity.permissionMode = mode as PermissionMode;
     this.emitAll();
   }
 
@@ -347,6 +379,7 @@ class ActivityMonitorImpl {
       if (activity.tool) info.tool = activity.tool;
       if (activity.error) info.error = activity.error;
       if (activity.compacting) info.compacting = true;
+      info.permissionMode = activity.permissionMode;
       result[id] = info;
     }
     return result;

@@ -365,6 +365,23 @@
   animation: pulse-glow 2s ease-in-out infinite;
 }
 
+/* Icon-friendly pulse (opacity/scale only — no dot-shaped glow ring, so it
+ * works on a glyph and keeps the glyph's own state color). */
+@keyframes glyph-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.9);
+  }
+}
+.glyph-pulse {
+  animation: glyph-pulse 1.6s ease-in-out infinite;
+}
+
 /* ── Status Bar Pulse (left-edge indicator) ──────────────── */
 
 @keyframes bar-pulse {

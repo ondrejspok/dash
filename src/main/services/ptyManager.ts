@@ -781,6 +781,9 @@ export async function startDirectPty(options: {
 
   ptys.set(options.id, record);
   activityMonitor.register(options.id, proc.pid, true);
+  // Seed the mode so the sidebar shows it before the first hook lands. Yolo
+  // tasks spawn with `--permission-mode auto`; everything else starts default.
+  if (options.autoApprove) activityMonitor.setPermissionMode(options.id, 'auto');
 
   // Forward output to renderer, replacing the Claude logo with "7" art
   const bannerFilter = createBannerFilter((filtered: string) => {

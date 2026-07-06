@@ -165,6 +165,15 @@ export interface UsageThresholds {
 
 export type ActivityState = 'busy' | 'idle' | 'waiting' | 'error';
 
+/** Claude Code permission mode, surfaced from hook input JSON (`permission_mode`). */
+export type PermissionMode =
+  | 'default'
+  | 'plan'
+  | 'acceptEdits'
+  | 'auto'
+  | 'dontAsk'
+  | 'bypassPermissions';
+
 /** Human-readable label for the current tool, derived from PreToolUse hook data. */
 export interface ToolActivity {
   /** Raw tool name from Claude Code (e.g. "Bash", "Edit", "Grep", "Agent"). */
@@ -188,6 +197,8 @@ export interface ActivityInfo {
   error?: ActivityError;
   /** True while Claude Code is compacting context. */
   compacting?: boolean;
+  /** Current Claude permission mode (plan / auto / etc.), from hook input JSON. */
+  permissionMode?: PermissionMode;
 }
 
 // ── Branch Types ─────────────────────────────────────────────
