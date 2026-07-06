@@ -453,7 +453,18 @@ class ActivityMonitorImpl {
         // final render after finishing is too short to clear the grace window.
         const pastStartup = Date.now() - activity.registeredAt > STARTUP_GRACE_MS;
         const streaming = Date.now() - activity.lastPtyOutputTime < IDLE_TO_BUSY_OUTPUT_MS;
-        if (activity.state === 'idle' && streaming && pastStartup && !activity.idleAuthoritative) {
+        // Self-heal → busy when Claude is actively streaming output but no busy
+        // hook landed. Covers two cases:
+        //   • idle but working (a missed UserPromptSubmit), and
+        //   • still shows "waiting" after you approved (Claude resumed but hasn't
+        //     fired PreToolUse yet).
+        // Suppressed for a task authoritatively finished via Stop, so background
+        // output can't re-pulse it. Sustained output (grace window) ignores the
+        // one-off render of the prompt itself, so waiting doesn't flicker.
+        const canHealToBusy =
+          activity.state === 'waiting' ||
+          (activity.state === 'idle' && !activity.idleAuthoritative);
+        if (canHealToBusy && streaming && pastStartup) {
           if (activity.idleChildrenSince === 0) {
             activity.idleChildrenSince = Date.now();
           } else if (Date.now() - activity.idleChildrenSince > IDLE_TO_BUSY_GRACE_MS) {
@@ -461,7 +472,7 @@ class ActivityMonitorImpl {
             activity.idleChildrenSince = 0;
             changed = true;
           }
-        } else if (activity.state === 'idle') {
+        } else if (activity.state === 'idle' || activity.state === 'waiting') {
           activity.idleChildrenSince = 0;
         }
 
