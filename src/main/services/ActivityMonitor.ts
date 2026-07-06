@@ -46,9 +46,11 @@ interface PtyActivity {
   compacting: boolean;
   /** Current Claude permission mode, from hook input JSON (defaults to 'default'). */
   permissionMode: PermissionMode;
-  /** True when the current idle state came from an authoritative Stop/idle hook.
-   *  While set, the idle→busy self-heal is suppressed so a finished task with
-   *  lingering child processes (MCP servers, shells) doesn't get re-flagged busy. */
+  /** While an idle state is considered authoritative, the idle→busy self-heal
+   *  is suppressed so a task that isn't actively working (finished, idle at the
+   *  prompt, resumed) doesn't get re-flagged "busy" just because it has lingering
+   *  child processes (MCP servers, shells). Only a real busy signal
+   *  (UserPromptSubmit / PreToolUse) clears it. */
   idleAuthoritative: boolean;
   /** Timestamp when this PTY was registered. Used to suppress idle→busy
    *  self-heal during Claude CLI startup (initialization child processes). */
@@ -157,7 +159,9 @@ class ActivityMonitorImpl {
       error: null,
       compacting: false,
       permissionMode: 'default',
-      idleAuthoritative: false,
+      // Start authoritative: a freshly-registered task is idle at the prompt,
+      // not working. It only becomes non-authoritative on a real busy signal.
+      idleAuthoritative: true,
       registeredAt: now,
       pendingBusyTimer: null,
     });
@@ -480,6 +484,8 @@ class ActivityMonitorImpl {
             activity.state = 'idle';
             activity.tool = null;
             activity.compacting = false;
+            // Idle reached via timeout is still "not working" — keep it steady.
+            activity.idleAuthoritative = true;
             changed = true;
           }
         }
