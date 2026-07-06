@@ -139,6 +139,15 @@ function RotationSection({
               } ${draggingRotId === task.id ? 'opacity-40' : ''}`}
               onClick={() => onSelectTask(task.projectId, task.id)}
             >
+              {/* Unread accent bar: needs-you (orange) / finished-unseen (blue) */}
+              {isUnread && (
+                <span
+                  aria-hidden
+                  className={`absolute left-0 top-1 bottom-1 w-[2.5px] rounded-full ${
+                    activity === 'waiting' ? 'bg-orange-500' : 'bg-blue-400'
+                  }`}
+                />
+              )}
               {/* Status indicator: mode shape + activity color/pulse */}
               <TaskStatusGlyph info={activityInfo} unseen={unseenTaskIds?.has(task.id)} />
 
@@ -640,6 +649,15 @@ export function LeftSidebar({
                             } ${draggingTaskId === task.id ? 'opacity-40' : ''}`}
                             onClick={() => onSelectTask(project.id, task.id)}
                           >
+                            {/* Unread accent bar: needs-you (orange) / finished-unseen (blue) */}
+                            {isUnread && (
+                              <span
+                                aria-hidden
+                                className={`absolute left-0 top-1 bottom-1 w-[2.5px] rounded-full ${
+                                  activityState === 'waiting' ? 'bg-orange-500' : 'bg-blue-400'
+                                }`}
+                              />
+                            )}
                             <div className="flex items-center gap-2">
                               {/* Status indicator: mode shape + activity color/pulse */}
                               <TaskStatusGlyph
