@@ -177,6 +177,11 @@ class HookServerImpl {
 
           const pathname = url.pathname;
 
+          // [sesh-diag] Trace every hook that reaches Dash. If a task's busy
+          // hooks (busy = UserPromptSubmit, tool-start = PreToolUse) don't show
+          // here while Claude is working, the hooks aren't firing/reaching us.
+          console.log(`[sesh-diag] hook ${pathname.replace('/hook/', '')} ${ptyId.slice(0, 8)}`);
+
           // Hooks are POST — drain the JSON body before responding.
           // IMPORTANT: Response must have an empty body (not 'ok') to avoid
           // injecting text into Claude's conversation context.
@@ -208,6 +213,7 @@ class HookServerImpl {
               const notificationType =
                 typeof payload.notification_type === 'string' ? payload.notification_type : '';
               const message = typeof payload.message === 'string' ? payload.message : undefined;
+              console.log(`[sesh-diag] notification type="${notificationType}" ${ptyId.slice(0, 8)}`);
 
               // Notification types that mean "Claude needs your input" → waiting.
               // permission_prompt: approve a tool. elicitation_dialog: an MCP

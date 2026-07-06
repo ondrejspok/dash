@@ -222,6 +222,7 @@ class ActivityMonitorImpl {
     // task's background output/children can't re-flag it busy.
     activity.idleAuthoritative = true;
     if (activity.state === 'idle') return;
+    console.log(`[sesh-diag] state ${ptyId.slice(0, 8)} -> idle (Stop/idle hook)`);
     activity.state = 'idle';
     activity.lastStatusLineTime = 0;
     activity.idleChildrenSince = 0;
@@ -251,6 +252,7 @@ class ActivityMonitorImpl {
       activity.idleChildrenSince = 0;
       activity.idleAuthoritative = false;
       activity.error = null;
+      console.log(`[sesh-diag] state ${ptyId.slice(0, 8)} -> busy (UserPromptSubmit)`);
       this.emitAll();
     }, BUSY_DEBOUNCE_MS);
   }
@@ -262,6 +264,7 @@ class ActivityMonitorImpl {
   setWaitingForPermission(ptyId: string): void {
     const activity = this.activities.get(ptyId);
     if (!activity || activity.state === 'waiting') return;
+    console.log(`[sesh-diag] state ${ptyId.slice(0, 8)} -> waiting (Notification)`);
     activity.state = 'waiting';
     activity.tool = null;
     this.emitAll();
@@ -303,6 +306,7 @@ class ActivityMonitorImpl {
 
     // Ensure busy state (covers edge case where UserPromptSubmit was missed)
     if (activity.state !== 'busy') {
+      console.log(`[sesh-diag] state ${ptyId.slice(0, 8)} -> busy (PreToolUse ${toolName})`);
       activity.state = 'busy';
       activity.idleChildrenSince = 0;
       activity.idleAuthoritative = false;
@@ -468,6 +472,7 @@ class ActivityMonitorImpl {
           if (activity.idleChildrenSince === 0) {
             activity.idleChildrenSince = Date.now();
           } else if (Date.now() - activity.idleChildrenSince > IDLE_TO_BUSY_GRACE_MS) {
+            console.log(`[sesh-diag] state ${id.slice(0, 8)} -> busy (self-heal: sustained output)`);
             activity.state = 'busy';
             activity.idleChildrenSince = 0;
             changed = true;
@@ -494,6 +499,9 @@ class ActivityMonitorImpl {
             now - activity.lastChildSeenTime > DIRECT_SPAWN_CHILDLESS_HARD_LIMIT_MS &&
             now - activity.lastPtyOutputTime > DIRECT_SPAWN_CHILDLESS_HARD_LIMIT_MS;
           if (childlessTimeout) {
+            console.log(
+              `[sesh-diag] state ${id.slice(0, 8)} -> idle (safety-valve: no children/output ${DIRECT_SPAWN_CHILDLESS_HARD_LIMIT_MS}ms)`,
+            );
             activity.state = 'idle';
             activity.tool = null;
             activity.compacting = false;
