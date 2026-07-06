@@ -46,6 +46,10 @@ interface PtyActivity {
   compacting: boolean;
   /** Current Claude permission mode, from hook input JSON (defaults to 'default'). */
   permissionMode: PermissionMode;
+  /** True when the current idle state came from an authoritative Stop/idle hook.
+   *  While set, the idle→busy self-heal is suppressed so a finished task with
+   *  lingering child processes (MCP servers, shells) doesn't get re-flagged busy. */
+  idleAuthoritative: boolean;
   /** Timestamp when this PTY was registered. Used to suppress idle→busy
    *  self-heal during Claude CLI startup (initialization child processes). */
   registeredAt: number;
@@ -153,6 +157,7 @@ class ActivityMonitorImpl {
       error: null,
       compacting: false,
       permissionMode: 'default',
+      idleAuthoritative: false,
       registeredAt: now,
       pendingBusyTimer: null,
     });
@@ -204,6 +209,9 @@ class ActivityMonitorImpl {
       clearTimeout(activity.pendingBusyTimer);
       activity.pendingBusyTimer = null;
     }
+    // Stop/idle hook is authoritative "done" — suppress the idle→busy self-heal
+    // so leftover child processes don't re-flag the task busy.
+    activity.idleAuthoritative = true;
     if (activity.state === 'idle') return;
     activity.state = 'idle';
     activity.lastStatusLineTime = 0;
@@ -232,6 +240,7 @@ class ActivityMonitorImpl {
       activity.state = 'busy';
       activity.lastChildSeenTime = Date.now();
       activity.idleChildrenSince = 0;
+      activity.idleAuthoritative = false;
       activity.error = null;
       this.emitAll();
     }, BUSY_DEBOUNCE_MS);
@@ -287,6 +296,7 @@ class ActivityMonitorImpl {
     if (activity.state !== 'busy') {
       activity.state = 'busy';
       activity.idleChildrenSince = 0;
+      activity.idleAuthoritative = false;
       activity.error = null;
     }
 
@@ -418,21 +428,25 @@ class ActivityMonitorImpl {
           activity.lastChildSeenTime = Date.now();
         }
 
-        // Self-heal: if children are detected while waiting for permission,
-        // the user approved and Claude started a tool. Transition to busy.
-        if (activity.state === 'waiting' && hasChildren) {
-          activity.state = 'busy';
-          activity.idleChildrenSince = 0;
-          changed = true;
-        }
+        // NOTE: we intentionally do NOT self-heal waiting → busy on child
+        // presence. When the user approves a permission prompt and a tool runs,
+        // the PreToolUse hook (setToolStart) flips to busy authoritatively; a
+        // pending tool's child process while still waiting would otherwise make
+        // "waiting for approval" flicker into "busy", which is exactly what made
+        // waiting/in-progress indistinguishable.
 
-        // Delayed self-heal: idle → busy when children are continuously
-        // present for IDLE_TO_BUSY_GRACE_MS. This recovers from missed
-        // busy hooks and mid-response stop hooks (which fire between
-        // chained tool calls). Suppressed during startup grace period
-        // to avoid false positives from Claude CLI initialization.
+        // Delayed self-heal: idle → busy when children are continuously present
+        // for IDLE_TO_BUSY_GRACE_MS — recovers from a missed busy hook. Skipped
+        // when the idle state came from an authoritative Stop hook (a finished
+        // task with lingering MCP/shell children must not pulse), and during the
+        // startup grace period (Claude CLI init children).
         const pastStartup = Date.now() - activity.registeredAt > STARTUP_GRACE_MS;
-        if (activity.state === 'idle' && hasChildren && pastStartup) {
+        if (
+          activity.state === 'idle' &&
+          hasChildren &&
+          pastStartup &&
+          !activity.idleAuthoritative
+        ) {
           if (activity.idleChildrenSince === 0) {
             activity.idleChildrenSince = Date.now();
           } else if (Date.now() - activity.idleChildrenSince > IDLE_TO_BUSY_GRACE_MS) {
