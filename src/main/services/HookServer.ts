@@ -31,9 +31,12 @@ class HookServerImpl {
   private showDesktopNotification(ptyId: string, body?: string): void {
     if (!this._desktopNotificationEnabled) return;
 
-    // Skip if the app window is focused — user is already looking at it
+    // Note: we deliberately do NOT skip when the Dash window is focused. That
+    // suppressed the notification whenever you were using Dash at all — even for
+    // a different task, a permission prompt, or the task you had open — which is
+    // exactly when finishes/permissions were being missed. Fire regardless of
+    // focus; the OS still de-dupes its own way.
     const win = BrowserWindow.getAllWindows()[0];
-    if (win && win.isFocused()) return;
 
     try {
       if (!body) {
