@@ -29,6 +29,7 @@ import type {
 import { IconButton } from './ui/IconButton';
 import { Tooltip } from './ui/Tooltip';
 import { TaskStatusGlyph } from './ui/TaskStatusGlyph';
+import { NotificationInbox } from './NotificationInbox';
 
 /** Left-edge accent color for a task row. Any non-working state gets a bar so
  *  it's scannable; working (busy) shows none (the glyph pulses instead).
@@ -358,6 +359,16 @@ export function LeftSidebar({
           </button>
         </Tooltip>
 
+        <NotificationInbox
+          projects={projects}
+          tasksByProject={tasksByProject}
+          taskActivity={taskActivity}
+          unseenTaskIds={unseenTaskIds}
+          taskDisplayName={taskDisplayName}
+          onSelectTask={onSelectTask}
+          variant="rail"
+        />
+
         <div className="w-6 border-t border-border/30 my-1" />
 
         <div className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col items-center gap-1 w-full px-1.5">
@@ -465,6 +476,14 @@ export function LeftSidebar({
           {showActiveTasksSection && rotationTasks.length > 0 ? 'Dash' : 'Projects'}
         </span>
         <div className="flex items-center gap-1">
+          <NotificationInbox
+            projects={projects}
+            tasksByProject={tasksByProject}
+            taskActivity={taskActivity}
+            unseenTaskIds={unseenTaskIds}
+            taskDisplayName={taskDisplayName}
+            onSelectTask={onSelectTask}
+          />
           <IconButton onClick={onOpenFolder} title="Add project" className="titlebar-no-drag">
             <FolderOpen size={15} strokeWidth={1.8} />
           </IconButton>
