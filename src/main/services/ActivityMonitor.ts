@@ -378,6 +378,31 @@ class ActivityMonitorImpl {
     }
   }
 
+  /**
+   * Force an immediate re-evaluation of every task and re-broadcast — the
+   * "refresh" button. Runs the normal poll (which re-checks children/output and
+   * self-heals missed transitions), then aggressively unsticks any task still
+   * marked 'busy' that has no children AND no recent output (a done task whose
+   * Stop hook was missed / it was interrupted). Note: it cannot recover a missed
+   * 'waiting' — that only comes from the Notification hook, not from inspection.
+   */
+  async forceResync(): Promise<void> {
+    await this.poll();
+    const childMap = await this.buildChildMap();
+    const now = Date.now();
+    for (const [, activity] of this.activities) {
+      if (!activity.isDirectSpawn || activity.state !== 'busy') continue;
+      const hasChildren = this.hasActiveWork(activity.pid, true, childMap);
+      const recentOutput = now - activity.lastPtyOutputTime < 3000;
+      if (!hasChildren && !recentOutput) {
+        activity.state = 'idle';
+        activity.tool = null;
+        activity.compacting = false;
+      }
+    }
+    this.emitAll();
+  }
+
   start(sender: WebContents): void {
     this.sender = sender;
     this.schedulePoll();

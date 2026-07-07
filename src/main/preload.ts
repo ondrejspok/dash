@@ -74,6 +74,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Activity monitor
   ptyGetAllActivity: () => ipcRenderer.invoke('pty:activity:getAll'),
+  resyncActivity: () => ipcRenderer.invoke('pty:activity:resync'),
   onPtyActivity: (
     callback: (data: Record<string, import('@shared/types').ActivityInfo>) => void,
   ) => {

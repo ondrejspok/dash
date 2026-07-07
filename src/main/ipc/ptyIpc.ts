@@ -112,6 +112,12 @@ export function registerPtyIpc(): void {
     return { success: true, data: activityMonitor.getAll() };
   });
 
+  // Force an immediate re-evaluation + re-broadcast of all task states.
+  ipcMain.handle('pty:activity:resync', async () => {
+    await activityMonitor.forceResync();
+    return { success: true, data: activityMonitor.getAll() };
+  });
+
   // Remote control
   ipcMain.handle('pty:remoteControl:enable', (_event, ptyId: string) => {
     try {
