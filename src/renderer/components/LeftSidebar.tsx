@@ -16,6 +16,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Blocks,
+  RefreshCw,
   X,
 } from 'lucide-react';
 import type {
@@ -273,6 +274,16 @@ export function LeftSidebar({
 }: LeftSidebarProps) {
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [collapsedArchived, setCollapsedArchived] = useState<Set<string>>(new Set());
+  const [resyncing, setResyncing] = useState(false);
+  const handleResync = async () => {
+    if (resyncing) return;
+    setResyncing(true);
+    try {
+      await window.electronAPI.resyncActivity?.();
+    } finally {
+      setTimeout(() => setResyncing(false), 500);
+    }
+  };
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const dragIdRef = useRef<string | null>(null);
   const taskOnReorder = useCallback(
@@ -472,9 +483,19 @@ export function LeftSidebar({
     <div className="h-full flex flex-col" style={{ background: 'hsl(var(--surface-1))' }}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-3 pb-1">
-        <span className="text-sm font-medium text-muted-foreground/50 select-none">
-          {showActiveTasksSection && rotationTasks.length > 0 ? 'Dash' : 'Projects'}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm font-medium text-muted-foreground/50 select-none">
+            {showActiveTasksSection && rotationTasks.length > 0 ? 'Dash' : 'Projects'}
+          </span>
+          <Tooltip content="Re-sync all task statuses">
+            <button
+              onClick={handleResync}
+              className="p-0.5 rounded text-muted-foreground/50 hover:text-foreground hover:bg-accent/60 transition-colors titlebar-no-drag"
+            >
+              <RefreshCw size={12} strokeWidth={2} className={resyncing ? 'animate-spin' : ''} />
+            </button>
+          </Tooltip>
+        </div>
         <div className="flex items-center gap-1">
           <NotificationInbox
             projects={projects}

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Bell, RefreshCw } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Bell } from 'lucide-react';
 import type { Project, Task, ActivityInfo } from '../../shared/types';
 import { Tooltip } from './ui/Tooltip';
 
@@ -35,7 +36,6 @@ export function NotificationInbox({
   variant?: 'sidebar' | 'rail';
 }) {
   const [open, setOpen] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -87,17 +87,6 @@ export function NotificationInbox({
 
   const bellSize = variant === 'rail' ? 18 : 15;
 
-  const refresh = async () => {
-    if (refreshing) return;
-    setRefreshing(true);
-    try {
-      await window.electronAPI.resyncActivity?.();
-    } finally {
-      // brief spin so the action feels acknowledged even if it returns instantly
-      setTimeout(() => setRefreshing(false), 500);
-    }
-  };
-
   return (
     <>
       <Tooltip content={count > 0 ? `${count} need${count === 1 ? 's' : ''} attention` : 'Notifications'}>
@@ -117,55 +106,50 @@ export function NotificationInbox({
         </button>
       </Tooltip>
 
-      {open && pos && (
-        <div
-          ref={popRef}
-          className="fixed z-50 w-[300px] max-h-[60vh] overflow-y-auto bg-card border border-border/60 rounded-xl shadow-2xl shadow-black/40 py-1 animate-scale-in"
-          style={{ top: pos.top, left: pos.left }}
-        >
-          <div className="px-3 py-2 text-[11px] font-medium text-muted-foreground border-b border-border/40 flex items-center justify-between">
-            <span>Needs attention</span>
-            <Tooltip content="Re-sync all task statuses">
-              <button
-                onClick={refresh}
-                className="p-0.5 rounded hover:bg-accent/60 hover:text-foreground transition-colors"
-              >
-                <RefreshCw size={12} strokeWidth={2} className={refreshing ? 'animate-spin' : ''} />
-              </button>
-            </Tooltip>
-          </div>
-          {count === 0 ? (
-            <div className="px-3 py-6 text-center text-[12px] text-muted-foreground/70">
-              All caught up 🎉
+      {open &&
+        pos &&
+        createPortal(
+          <div
+            ref={popRef}
+            className="fixed z-[100] w-[300px] max-h-[60vh] overflow-y-auto bg-card border border-border/60 rounded-xl shadow-2xl shadow-black/40 py-1 animate-scale-in"
+            style={{ top: pos.top, left: pos.left }}
+          >
+            <div className="px-3 py-2 text-[11px] font-medium text-muted-foreground border-b border-border/40">
+              Needs attention
             </div>
-          ) : (
-            items.map(({ task, project, state }) => (
-              <button
-                key={task.id}
-                onClick={() => {
-                  onSelectTask(project.id, task.id);
-                  setOpen(false);
-                }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-accent/50 transition-colors"
-              >
-                <span
-                  className={`w-[6px] h-[6px] rounded-full flex-shrink-0 ${
-                    state === 'waiting' ? 'bg-orange-500' : 'bg-blue-400'
-                  }`}
-                />
-                <span className="flex-1 min-w-0">
-                  <span className="block truncate text-[12px] text-foreground">
-                    {taskDisplayName(task)}
+            {count === 0 ? (
+              <div className="px-3 py-6 text-center text-[12px] text-muted-foreground/70">
+                All caught up 🎉
+              </div>
+            ) : (
+              items.map(({ task, project, state }) => (
+                <button
+                  key={task.id}
+                  onClick={() => {
+                    onSelectTask(project.id, task.id);
+                    setOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-accent/50 transition-colors"
+                >
+                  <span
+                    className={`w-[6px] h-[6px] rounded-full flex-shrink-0 ${
+                      state === 'waiting' ? 'bg-orange-500' : 'bg-blue-400'
+                    }`}
+                  />
+                  <span className="flex-1 min-w-0">
+                    <span className="block truncate text-[12px] text-foreground">
+                      {taskDisplayName(task)}
+                    </span>
+                    <span className="block truncate text-[10px] text-muted-foreground/70">
+                      {project.name} · {state === 'waiting' ? 'waiting for you' : 'finished'}
+                    </span>
                   </span>
-                  <span className="block truncate text-[10px] text-muted-foreground/70">
-                    {project.name} · {state === 'waiting' ? 'waiting for you' : 'finished'}
-                  </span>
-                </span>
-              </button>
-            ))
-          )}
-        </div>
-      )}
+                </button>
+              ))
+            )}
+          </div>,
+          document.body,
+        )}
     </>
   );
 }
