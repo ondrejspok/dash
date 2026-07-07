@@ -285,7 +285,11 @@ export class TerminalSessionManager {
       }
       // Windows: pad right so fit addon leaves room for the scrollbar.
       if (this.terminal.element && window.electronAPI.getPlatform() === 'win32') {
-        this.terminal.element.style.paddingRight = '24px';
+        // Right gutter so fit() doesn't keep a column that renders under the
+        // right panel edge (rightmost chars were getting clipped). Must clear
+        // ~1 cell + scrollbar; the PTY width tracks xterm's cols, so both shrink
+        // together and Ink stays aligned.
+        this.terminal.element.style.paddingRight = '36px';
       }
 
       // Copy-on-select: when a drag-selection finishes (mouseup), copy it to the
