@@ -403,6 +403,34 @@ class ActivityMonitorImpl {
     this.emitAll();
   }
 
+  /**
+   * Apply an authoritative status reported by `claude agents --json` (Claude's
+   * own view of a session). Overrides the hook/heuristic state since it's the
+   * ground truth. Emits if the state changed. Does NOT fire desktop
+   * notifications — this is a sync, not an event (notifications stay hook-driven
+   * to avoid re-notifying on every periodic sync).
+   */
+  applyClaudeStatus(ptyId: string, status: 'busy' | 'waiting' | 'idle'): void {
+    const activity = this.activities.get(ptyId);
+    if (!activity) return;
+    if (activity.state === status) return;
+    if (activity.pendingBusyTimer) {
+      clearTimeout(activity.pendingBusyTimer);
+      activity.pendingBusyTimer = null;
+    }
+    activity.state = status;
+    if (status === 'idle') {
+      activity.idleAuthoritative = true;
+      activity.tool = null;
+      activity.compacting = false;
+      activity.error = null;
+    } else {
+      activity.idleAuthoritative = false;
+      if (status === 'busy') activity.error = null;
+    }
+    this.emitAll();
+  }
+
   start(sender: WebContents): void {
     this.sender = sender;
     this.schedulePoll();

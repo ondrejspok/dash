@@ -7,6 +7,7 @@ import {
   killPty,
   killByOwner,
   sendRemoteControl,
+  syncStatusFromClaudeAgents,
 } from '../services/ptyManager';
 import { DatabaseService } from '../services/DatabaseService';
 import { terminalSnapshotService } from '../services/TerminalSnapshotService';
@@ -113,8 +114,11 @@ export function registerPtyIpc(): void {
   });
 
   // Force an immediate re-evaluation + re-broadcast of all task states.
+  // Prefer Claude's own authoritative status (`claude agents --json`); if that
+  // can't run (old CLI / no tasks), fall back to the child/output heuristic.
   ipcMain.handle('pty:activity:resync', async () => {
-    await activityMonitor.forceResync();
+    const synced = await syncStatusFromClaudeAgents();
+    if (!synced) await activityMonitor.forceResync();
     return { success: true, data: activityMonitor.getAll() };
   });
 

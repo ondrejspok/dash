@@ -1053,6 +1053,89 @@ export function killPty(id: string): void {
   }
 }
 
+/** Normalize a path for cross-source comparison (Windows: case-insensitive,
+ *  forward slashes, no trailing slash). */
+function normPath(p: string): string {
+  let s = p.replace(/\\/g, '/').replace(/\/+$/, '');
+  if (process.platform === 'win32') s = s.toLowerCase();
+  return s;
+}
+
+interface ClaudeAgentEntry {
+  cwd?: string;
+  status?: string;
+}
+
+/**
+ * Pull each session's authoritative status from `claude agents --json` — Claude's
+ * own view of every session (busy/waiting/idle), keyed by cwd — and apply it to
+ * matching Dash tasks. This is the reliable status source (not hooks, not process
+ * inspection) and naturally covers background agents. Returns false if it can't
+ * run (no Claude PTYs open, old CLI without `agents`, timeout, parse error) so
+ * callers can fall back.
+ */
+export async function syncStatusFromClaudeAgents(): Promise<boolean> {
+  const direct: Array<{ ptyId: string; cwd: string }> = [];
+  for (const [ptyId, rec] of ptys) {
+    if (rec.isDirectSpawn) direct.push({ ptyId, cwd: rec.cwd });
+  }
+  if (direct.length === 0) return false; // nothing to sync — don't spawn claude
+
+  const claudePath = await findClaudePath();
+  if (!claudePath) return false;
+
+  let stdout: string;
+  try {
+    const opts = { timeout: 15000, maxBuffer: 4 * 1024 * 1024 } as const;
+    const res =
+      process.platform === 'win32'
+        ? await execFileAsync('cmd.exe', ['/c', claudePath, 'agents', '--json'], opts)
+        : await execFileAsync(claudePath, ['agents', '--json'], opts);
+    stdout = res.stdout;
+  } catch {
+    return false; // old CLI / timeout — caller falls back
+  }
+
+  let entries: ClaudeAgentEntry[];
+  try {
+    const parsed = JSON.parse(stdout);
+    if (!Array.isArray(parsed)) return false;
+    entries = parsed as ClaudeAgentEntry[];
+  } catch {
+    return false;
+  }
+
+  // cwd -> most-active status, in case multiple sessions share a cwd.
+  const rank = (s?: string) => (s === 'busy' ? 3 : s === 'waiting' ? 2 : s === 'idle' ? 1 : 0);
+  const byCwd = new Map<string, 'busy' | 'waiting' | 'idle'>();
+  for (const e of entries) {
+    if (!e.cwd || (e.status !== 'busy' && e.status !== 'waiting' && e.status !== 'idle')) continue;
+    const key = normPath(e.cwd);
+    if (rank(e.status) > rank(byCwd.get(key))) byCwd.set(key, e.status);
+  }
+
+  for (const { ptyId, cwd } of direct) {
+    const status = byCwd.get(normPath(cwd));
+    if (status) activityMonitor.applyClaudeStatus(ptyId, status);
+  }
+  return true;
+}
+
+let agentsSyncTimer: ReturnType<typeof setInterval> | null = null;
+/** Start periodic (~15s) authoritative status sync from `claude agents --json`. */
+export function startClaudeAgentsSync(): void {
+  if (agentsSyncTimer) return;
+  agentsSyncTimer = setInterval(() => {
+    void syncStatusFromClaudeAgents();
+  }, 15000);
+}
+export function stopClaudeAgentsSync(): void {
+  if (agentsSyncTimer) {
+    clearInterval(agentsSyncTimer);
+    agentsSyncTimer = null;
+  }
+}
+
 /**
  * Kill all PTYs (on app quit).
  */
@@ -1066,6 +1149,7 @@ export function killAll(): void {
   }
   ptys.clear();
   // Bulk cleanup — don't rely on onExit during shutdown
+  stopClaudeAgentsSync();
   activityMonitor.stop();
 }
 

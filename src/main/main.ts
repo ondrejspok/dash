@@ -132,6 +132,10 @@ app.whenReady().then(async () => {
   const { activityMonitor } = await import('./services/ActivityMonitor');
   activityMonitor.start(mainWindow.webContents);
 
+  // Periodically sync authoritative statuses from `claude agents --json`.
+  const { startClaudeAgentsSync } = await import('./services/ptyManager');
+  startClaudeAgentsSync();
+
   // Remote control service needs a sender for state change events
   const { remoteControlService } = await import('./services/remoteControlService');
   remoteControlService.setSender(mainWindow.webContents);
