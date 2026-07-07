@@ -285,11 +285,10 @@ export class TerminalSessionManager {
       }
       // Windows: pad right so fit addon leaves room for the scrollbar.
       if (this.terminal.element && window.electronAPI.getPlatform() === 'win32') {
-        // Right gutter so fit() doesn't keep a column that renders under the
-        // right panel edge (rightmost chars were getting clipped). Must clear
-        // ~1 cell + scrollbar; the PTY width tracks xterm's cols, so both shrink
-        // together and Ink stays aligned.
-        this.terminal.element.style.paddingRight = '36px';
+        // Small symmetric right gutter; the real clearance comes from the column
+        // reserve in ptyCols() + fit(), which is deterministic (padding-based
+        // clearance kept letting a rounded-up column slip under the panel).
+        this.terminal.element.style.paddingRight = '12px';
       }
 
       // Copy-on-select: when a drag-selection finishes (mouseup), copy it to the
@@ -674,11 +673,12 @@ export class TerminalSessionManager {
 
   /** Reduce cols for PTY so the TUI leaves a right-side gutter. */
   private ptyCols(cols: number): number {
-    // Windows: no col reserve — Ink's cursor positioning drifts from xterm's
-    // grid during streaming if PTY cols < xterm cols, producing garbled output.
-    // Scrollbar clearance is handled by paddingRight on the .xterm element.
+    // Windows: reserve a small gutter so the rightmost column isn't drawn under
+    // the right panel. fit() resizes xterm to this same reduced count, so PTY
+    // cols == xterm cols and Ink stays aligned (drift only happens when they
+    // differ, which we avoid).
     if (window.electronAPI.getPlatform() === 'win32') {
-      return Math.max(1, cols);
+      return Math.max(1, cols - 2);
     }
     const reserve = this.shellOnly
       ? TerminalSessionManager.COL_RESERVE_SHELL
@@ -692,6 +692,12 @@ export class TerminalSessionManager {
       const dims = this.fitAddon.proposeDimensions();
       if (dims && dims.cols > 0 && dims.rows > 0) {
         const cols = this.ptyCols(dims.cols);
+        // Windows: render xterm at the reserved width too (fitAddon.fit() sized
+        // it to the full width). Keeps PTY cols == xterm cols so Ink stays
+        // aligned, and guarantees the last column clears the right panel.
+        if (window.electronAPI.getPlatform() === 'win32' && this.terminal.cols !== cols) {
+          this.terminal.resize(cols, dims.rows);
+        }
         // Skip redundant PTY resizes to avoid SIGWINCH prompt redraw
         if (cols === this.lastPtyCols && dims.rows === this.lastPtyRows) return;
         this.lastPtyCols = cols;
