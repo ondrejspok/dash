@@ -312,6 +312,20 @@ export class TerminalSessionManager {
           }
           this.copySelectionSeen = false;
         });
+        // Right-click: reliable copy/paste (the OS/xterm default is flaky under
+        // Claude's mouse capture). If there's a selection (live or cached) copy
+        // it; otherwise paste. Suppress the native context menu either way.
+        el.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          const sel = this.terminal.getSelection() || this.lastSelection;
+          if (sel && sel.trim()) {
+            window.electronAPI.clipboardWriteText(sel);
+          } else {
+            window.electronAPI.clipboardReadText().then((text) => {
+              if (text) window.electronAPI.ptyInput({ id: this.id, data: text });
+            });
+          }
+        });
       }
       // Load GPU addon after terminal is in DOM
       await this.loadGpuAddon();
